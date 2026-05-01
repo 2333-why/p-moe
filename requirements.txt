@@ -1,0 +1,14 @@
+torch
+transformers
+accelerate
+safetensors
+sentencepiece
+protobuf
+datasets
+pyyaml
+tqdm
+
+# Optional future dependencies; do not require for Stage 1.
+# bitsandbytes
+# peft
+# wandb
