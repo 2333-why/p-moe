@@ -63,6 +63,7 @@ Build a complete runnable Python project that can:
 Stage 1 is only for:
 
 - environment check;
+- explicit model asset download through `scripts/download_assets.py`;
 - DeepSeek-MoE-16B-Base loading;
 - text generation;
 - GPU memory inspection;
@@ -86,17 +87,25 @@ Allowed lightweight checks:
 
 ```bash
 python -m compileall scripts src
-python scripts/check_env.py
 ```
 
 Do not run:
 
 ```bash
+python scripts/download_assets.py
 python scripts/test_generate.py
 python scripts/inspect_model.py
 ```
 
 unless the user explicitly asks to run them and accepts model download/loading.
+
+Download-stage additions:
+
+- `scripts/download_assets.py` is the only script that should perform network model asset download.
+- It must not run inference or call `AutoModelForCausalLM.from_pretrained`.
+- It must support downloading `deepseek-ai/deepseek-moe-16b-base` to Hugging Face cache or `models/deepseek-moe-16b-base`.
+- It must respect `HF_ENDPOINT`, `HF_HOME`, and `HF_TOKEN`, and must never print raw tokens.
+- Offline inference should use `scripts/test_generate.py --local_files_only`.
 
 ---
 
@@ -308,7 +317,9 @@ Allowed files:
 ```text
 README.md
 requirements.txt
+configs/download_config.yaml
 configs/generation_config.yaml
+models/.gitkeep
 outputs/.gitkeep
 ```
 
@@ -316,7 +327,7 @@ Responsibilities:
 
 - Create or verify directory structure.
 - Generate `requirements.txt`.
-- Generate default YAML config.
+- Generate default YAML configs.
 - Generate README with installation, usage, outputs, common errors, future stages.
 - Include both `hc-new/hc-activate` workflow and standard conda fallback.
 - Do not implement model loading logic.
@@ -343,6 +354,7 @@ Responsibilities:
 Allowed files:
 
 ```text
+scripts/download_assets.py
 scripts/test_generate.py
 src/model_utils.py
 src/generation_utils.py
@@ -352,10 +364,12 @@ src/logging_utils.py
 Responsibilities:
 
 - Load tokenizer.
+- Implement download-only asset acquisition in `scripts/download_assets.py`.
 - Load `AutoModelForCausalLM`.
 - Support BF16, FP16, FP32.
 - Support `device_map="auto"`.
 - Support optional `offload_folder`.
+- Support `local_files_only` for offline inference.
 - Save `summary.json`, `generated.txt`, `device_map.json`, `config_used.yaml`.
 - Detect CPU/disk offload.
 - Catch and summarize errors.
@@ -399,7 +413,6 @@ Responsibilities:
 - Check that Stage 1 does not implement Stage 2/3/4 functionality.
 - Run lightweight checks only:
   - `python -m compileall scripts src`
-  - `python scripts/check_env.py`
 - Do not run commands that download or load DeepSeek-MoE-16B unless the user explicitly asks.
 
 ## 4.3 File Ownership Rule
@@ -440,9 +453,13 @@ deepseek_moe_probe/
 ├── README.md
 ├── requirements.txt
 ├── configs/
+│   ├── download_config.yaml
 │   └── generation_config.yaml
+├── models/
+│   └── .gitkeep
 ├── scripts/
 │   ├── check_env.py
+│   ├── download_assets.py
 │   ├── test_generate.py
 │   └── inspect_model.py
 ├── src/
@@ -523,6 +540,7 @@ The main script must support command-line overrides for important fields:
 - `--max_new_tokens`
 - `--output_dir`
 - `--offload_folder`
+- `--local_files_only`
 
 ---
 
@@ -566,7 +584,47 @@ Run command:
 python scripts/check_env.py
 ```
 
-## 8.2 `scripts/test_generate.py`
+## 8.2 `scripts/download_assets.py`
+
+This script is the only Stage 1 entry point that should perform network model asset downloads.
+
+It must:
+
+1. Read `configs/download_config.yaml` when present.
+2. Support downloading `deepseek-ai/deepseek-moe-16b-base` to the Hugging Face cache.
+3. Support downloading to `models/deepseek-moe-16b-base`.
+4. Support command-line arguments:
+   - `--model_name`
+   - `--local_dir`
+   - `--mode cache/local`
+   - `--resume_download`
+5. Respect `HF_ENDPOINT`, `HF_HOME`, and `HF_TOKEN`.
+6. Never print raw `HF_TOKEN` or other secrets.
+7. Never call `AutoModelForCausalLM.from_pretrained`.
+8. Never run inference or text generation.
+
+Example cache download:
+
+```bash
+python scripts/download_assets.py \
+  --model_name deepseek-ai/deepseek-moe-16b-base \
+  --mode cache \
+  --resume_download
+```
+
+Example local download:
+
+```bash
+python scripts/download_assets.py \
+  --model_name deepseek-ai/deepseek-moe-16b-base \
+  --mode local \
+  --local_dir models/deepseek-moe-16b-base \
+  --resume_download
+```
+
+Agents must not run this command during automated development unless the user explicitly asks and accepts network download.
+
+## 8.3 `scripts/test_generate.py`
 
 This is the main script.
 
@@ -589,6 +647,7 @@ It must:
 15. Save a full result summary to `summary.json`.
 16. Print the generated text and key metrics to the terminal.
 17. If any error occurs, save a failure `summary.json` with error type, error message, and suggestions.
+18. Support `--local_files_only` for offline inference from Hugging Face cache or a local model directory.
 
 Basic run:
 
@@ -615,7 +674,16 @@ tlog generate.log python scripts/test_generate.py \
   --max_new_tokens 120
 ```
 
-## 8.3 `scripts/inspect_model.py`
+Offline example:
+
+```bash
+python scripts/test_generate.py \
+  --local_files_only \
+  --prompt "The history of artificial intelligence can be traced back to" \
+  --max_new_tokens 120
+```
+
+## 8.4 `scripts/inspect_model.py`
 
 This script loads the model and inspects its module structure.
 
@@ -697,7 +765,11 @@ def resolve_dtype(dtype_name: str):
     fp32 -> torch.float32
     """
 
-def load_tokenizer(model_name: str, trust_remote_code: bool = True):
+def load_tokenizer(
+    model_name: str,
+    trust_remote_code: bool = True,
+    local_files_only: bool = False,
+):
     """
     Load tokenizer.
     If pad_token_id is missing, try to set it to eos_token_id.
@@ -711,6 +783,7 @@ def load_causal_lm(
     low_cpu_mem_usage: bool = True,
     max_memory: dict | None = None,
     offload_folder: str | None = None,
+    local_files_only: bool = False,
 ):
     """
     Load AutoModelForCausalLM and return the model.
@@ -728,6 +801,7 @@ AutoModelForCausalLM.from_pretrained(
     low_cpu_mem_usage=low_cpu_mem_usage,
     max_memory=max_memory,
     offload_folder=offload_folder,
+    local_files_only=local_files_only,
 )
 ```
 
@@ -1100,7 +1174,6 @@ Do not run scripts/test_generate.py.
 Do not run scripts/inspect_model.py.
 Allowed tests:
 - python -m compileall scripts src
-- python scripts/check_env.py
 
 Wait for all subagents to complete, then summarize:
 1. What each agent completed.

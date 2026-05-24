@@ -88,6 +88,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_new_tokens", type=int, default=None)
     parser.add_argument("--output_dir", default=None)
     parser.add_argument("--offload_folder", default=None)
+    parser.add_argument(
+        "--local_files_only",
+        action="store_true",
+        default=None,
+        help="Load tokenizer/model only from local files or Hugging Face cache.",
+    )
     return parser.parse_args()
 
 
@@ -109,7 +115,16 @@ def apply_overrides(config: dict[str, Any], args: argparse.Namespace) -> dict[st
     """
     merged = dict(default_config())
     merged.update(config)
-    for key in ("model_name", "dtype", "device_map", "prompt", "max_new_tokens", "output_dir", "offload_folder"):
+    for key in (
+        "model_name",
+        "dtype",
+        "device_map",
+        "prompt",
+        "max_new_tokens",
+        "output_dir",
+        "offload_folder",
+        "local_files_only",
+    ):
         value = getattr(args, key)
         if value is not None:
             merged[key] = value
@@ -133,6 +148,7 @@ def default_config() -> dict[str, Any]:
         "top_p": 0.9,
         "repetition_penalty": 1.05,
         "output_dir": "outputs",
+        "local_files_only": False,
     }
 
 
@@ -246,6 +262,7 @@ def main() -> int:
         tokenizer = load_tokenizer(
             config["model_name"],
             trust_remote_code=bool(config.get("trust_remote_code", True)),
+            local_files_only=bool(config.get("local_files_only", False)),
         )
 
         print("Loading model...")
@@ -257,6 +274,7 @@ def main() -> int:
             low_cpu_mem_usage=bool(config.get("low_cpu_mem_usage", True)),
             max_memory=config.get("max_memory"),
             offload_folder=config.get("offload_folder"),
+            local_files_only=bool(config.get("local_files_only", False)),
         )
         model_loaded = True
         gpu_info_after_loading = get_gpu_info()

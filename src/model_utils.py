@@ -51,7 +51,11 @@ def resolve_dtype(dtype_name: str):
     return dtype_map[normalized]
 
 
-def load_tokenizer(model_name: str, trust_remote_code: bool = True):
+def load_tokenizer(
+    model_name: str,
+    trust_remote_code: bool = True,
+    local_files_only: bool = False,
+):
     """
     Load tokenizer.
     If pad_token_id is missing, try to set it to eos_token_id.
@@ -61,6 +65,7 @@ def load_tokenizer(model_name: str, trust_remote_code: bool = True):
             model_name,
             trust_remote_code=trust_remote_code,
             use_fast=True,
+            local_files_only=local_files_only,
         )
     except Exception as exc:
         raise RuntimeError(
@@ -80,6 +85,7 @@ def load_causal_lm(
     low_cpu_mem_usage: bool = True,
     max_memory: dict[str, Any] | None = None,
     offload_folder: str | None = None,
+    local_files_only: bool = False,
 ):
     """
     Load AutoModelForCausalLM and return the model.
@@ -90,6 +96,7 @@ def load_causal_lm(
         "device_map": device_map,
         "trust_remote_code": trust_remote_code,
         "low_cpu_mem_usage": low_cpu_mem_usage,
+        "local_files_only": local_files_only,
     }
     if max_memory is not None:
         kwargs["max_memory"] = max_memory

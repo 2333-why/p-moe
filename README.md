@@ -12,9 +12,13 @@ This stage does not implement WikiText perplexity, LoRA/QLoRA training, p-bit ro
 |-- README.md
 |-- requirements.txt
 |-- configs/
+|   |-- download_config.yaml
 |   `-- generation_config.yaml
+|-- models/
+|   `-- .gitkeep
 |-- scripts/
 |   |-- check_env.py
+|   |-- download_assets.py
 |   |-- test_generate.py
 |   `-- inspect_model.py
 |-- src/
@@ -80,10 +84,52 @@ Lightweight environment check:
 python scripts/check_env.py
 ```
 
-Text generation probe. This may download and load a large model:
+## Online Download Stage
+
+Use this stage when the server has network access. It downloads model assets only; it does not load the model for inference and does not generate text.
+
+Download to the Hugging Face cache controlled by `HF_HOME`:
 
 ```bash
-python scripts/test_generate.py
+python scripts/download_assets.py \
+  --model_name deepseek-ai/deepseek-moe-16b-base \
+  --mode cache \
+  --resume_download
+```
+
+Download to a project-local directory:
+
+```bash
+python scripts/download_assets.py \
+  --model_name deepseek-ai/deepseek-moe-16b-base \
+  --mode local \
+  --local_dir models/deepseek-moe-16b-base \
+  --resume_download
+```
+
+The download script respects existing `HF_ENDPOINT`, `HF_HOME`, and `HF_TOKEN`. It prints only whether `HF_TOKEN` is set, never the raw token.
+
+## Offline Inference Stage
+
+After assets are already available in the Hugging Face cache or in a local model directory, run inference without network access by adding `--local_files_only`.
+
+Offline inference from Hugging Face cache:
+
+```bash
+python scripts/test_generate.py \
+  --local_files_only \
+  --prompt "The history of artificial intelligence can be traced back to" \
+  --max_new_tokens 120
+```
+
+Offline inference from a project-local model directory:
+
+```bash
+python scripts/test_generate.py \
+  --model_name models/deepseek-moe-16b-base \
+  --local_files_only \
+  --prompt "The history of artificial intelligence can be traced back to" \
+  --max_new_tokens 120
 ```
 
 Generation with overrides:
