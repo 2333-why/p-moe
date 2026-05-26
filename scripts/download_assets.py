@@ -22,6 +22,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Path to download YAML config")
     parser.add_argument("--model_name", default=None, help="Hugging Face model id")
+    parser.add_argument("--revision", default=None, help="Model revision, branch, tag, or commit SHA")
     parser.add_argument("--local_dir", default=None, help="Local output directory for --mode local")
     parser.add_argument("--mode", choices=["cache", "local"], default=None, help="Download mode")
     parser.add_argument(
@@ -49,7 +50,8 @@ def default_config() -> dict[str, Any]:
     """Return default download settings."""
     return {
         "model_name": "deepseek-ai/deepseek-moe-16b-base",
-        "mode": "cache",
+        "revision": "main",
+        "mode": "local",
         "local_dir": "models/deepseek-moe-16b-base",
         "resume_download": True,
     }
@@ -59,7 +61,7 @@ def apply_overrides(config: dict[str, Any], args: argparse.Namespace) -> dict[st
     """Apply non-null CLI overrides to download config."""
     merged = default_config()
     merged.update(config)
-    for key in ("model_name", "local_dir", "mode", "resume_download"):
+    for key in ("model_name", "revision", "local_dir", "mode", "resume_download"):
         value = getattr(args, key)
         if value is not None:
             merged[key] = value
@@ -71,8 +73,19 @@ def env_status() -> dict[str, str]:
     return {
         "HF_ENDPOINT": os.environ.get("HF_ENDPOINT", "not set"),
         "HF_HOME": os.environ.get("HF_HOME", "not set"),
+        "HF_HUB_CACHE": os.environ.get("HF_HUB_CACHE", "not set"),
         "HF_TOKEN": "set" if os.environ.get("HF_TOKEN") else "not set",
     }
+
+
+def redact_secrets(text: str) -> str:
+    """Redact known secret environment variable values from loggable text."""
+    redacted = text
+    for name in ("HF_TOKEN", "WANDB_API_KEY"):
+        value = os.environ.get(name)
+        if value and len(value) >= 4:
+            redacted = redacted.replace(value, f"<{name}:redacted>")
+    return redacted
 
 
 def print_env_status() -> None:
@@ -93,22 +106,27 @@ def download_assets(config: dict[str, Any]) -> str:
         ) from exc
 
     model_name = str(config["model_name"])
+    revision = str(config.get("revision") or "main")
     mode = str(config.get("mode", "cache"))
     resume_download = bool(config.get("resume_download", True))
 
     kwargs: dict[str, Any] = {
         "repo_id": model_name,
+        "revision": revision,
         "resume_download": resume_download,
     }
+    hf_token = os.environ.get("HF_TOKEN")
+    if hf_token:
+        kwargs["token"] = hf_token
 
     if mode == "local":
         local_dir = Path(str(config.get("local_dir") or "models/deepseek-moe-16b-base"))
         local_dir.mkdir(parents=True, exist_ok=True)
         kwargs["local_dir"] = str(local_dir)
         kwargs["local_dir_use_symlinks"] = False
-        print(f"Downloading {model_name} to local directory: {local_dir}")
+        print(f"Downloading {model_name}@{revision} to local directory: {local_dir}")
     elif mode == "cache":
-        print(f"Downloading {model_name} to Hugging Face cache.")
+        print(f"Downloading {model_name}@{revision} to Hugging Face cache.")
     else:
         raise ValueError("mode must be either 'cache' or 'local'")
 
@@ -124,13 +142,14 @@ def main() -> int:
     print_env_status()
     print(f"Download mode: {config['mode']}")
     print(f"Model name: {config['model_name']}")
+    print(f"Revision: {config.get('revision', 'main')}")
     if config["mode"] == "local":
         print(f"Local directory: {config['local_dir']}")
 
     try:
         snapshot_path = download_assets(config)
     except Exception as exc:
-        print(f"Download failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"Download failed: {type(exc).__name__}: {redact_secrets(str(exc))}", file=sys.stderr)
         print(
             "Suggestions: check network access, HF_ENDPOINT, Hugging Face permissions, "
             "HF_HOME/cache disk space, and whether HF_TOKEN is set when needed.",

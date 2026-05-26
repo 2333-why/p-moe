@@ -1,0 +1,19 @@
+model_name: "models/deepseek-moe-16b-base"
+
+dtype: "bf16"
+device_map: "auto"
+trust_remote_code: true
+low_cpu_mem_usage: true
+local_files_only: true
+offload_folder: null
+
+dataset_name: "wikitext"
+dataset_config_name: "wikitext-2-raw-v1"
+split: "test"
+text_column: "text"
+
+block_size: 2048
+stride: 1024
+max_eval_tokens: null
+
+output_dir: "outputs"

@@ -1,0 +1,30 @@
+model_name: "deepseek-ai/deepseek-moe-16b-base"
+dtype: "bf16"
+device_map: "auto"
+trust_remote_code: true
+low_cpu_mem_usage: true
+output_dir: "outputs"
+
+router_keywords:
+  - "gate"
+  - "router"
+  - "expert"
+
+enabled: false
+alpha: 1.0
+temperature: 1.0
+top_k: null
+use_load_bias: false
+load_ema_decay: 0.99
+eps: 1.0e-8
+
+pbit_router:
+  enabled: false
+  num_experts: null
+  top_k: null
+  alpha: 1.0
+  temperature: 1.0
+  use_load_bias: false
+  load_ema_decay: 0.99
+  eps: 1.0e-8
+  logits_index: 0

@@ -9,6 +9,7 @@ pyyaml
 tqdm
 
 # Optional future dependencies; do not require for Stage 1.
+# Optional Stage 3 dependencies; install explicitly before running train scripts.
 # bitsandbytes
 # peft
 # wandb

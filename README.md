@@ -1,268 +1,264 @@
-# DeepSeek-MoE-16B-Base Inference Probe
+# DeepSeek-MoE p-bit Routing Probe
 
-This repository is Stage 1 of a p-bit-assisted MoE routing research project. Stage 1 is inference only: it checks whether `deepseek-ai/deepseek-moe-16b-base` can load on the current server, whether GPU memory is sufficient, and whether the model can complete a short text generation run.
+This repository contains staged scaffolds for probing `deepseek-ai/deepseek-moe-16b-base` and later experimenting with p-bit-assisted MoE routing. The code is safe-by-default: development checks must not download the model, load the large model, evaluate WikiText, or train unless the user explicitly runs those scripts.
 
-This stage does not implement WikiText perplexity, LoRA/QLoRA training, p-bit router modification, WandB logging, distributed training, model conversion, or quantized loading.
-
-## Project Layout
+## Layout
 
 ```text
 .
 |-- AGENTS.md
-|-- README.md
 |-- requirements.txt
 |-- configs/
 |   |-- download_config.yaml
-|   `-- generation_config.yaml
+|   |-- generation_config.yaml
+|   |-- eval_wikitext_config.yaml
+|   |-- train_lora_config.yaml
+|   |-- train_qlora_config.yaml
+|   `-- pbit_router_config.yaml
 |-- models/
 |   `-- .gitkeep
 |-- scripts/
 |   |-- check_env.py
 |   |-- download_assets.py
 |   |-- test_generate.py
-|   `-- inspect_model.py
+|   |-- inspect_model.py
+|   |-- eval_wikitext_ppl.py
+|   |-- train_lora.py
+|   |-- train_qlora.py
+|   |-- inspect_router.py
+|   |-- test_pbit_router_unit.py
+|   |-- collect_results.py
+|   |-- run_stage2_eval.sh
+|   |-- run_stage3_qlora.sh
+|   `-- run_stage4_router_inspect.sh
 |-- src/
-|   |-- __init__.py
-|   |-- gpu_utils.py
-|   |-- model_utils.py
-|   |-- logging_utils.py
-|   `-- generation_utils.py
 `-- outputs/
-    `-- .gitkeep
 ```
 
 ## Installation
 
-Preferred workflow on the managed server:
+Preferred managed-server workflow:
 
 ```bash
 source mirror.sh
 hc-new deepseek_moe python=3.10
 hc-activate deepseek_moe
 
-# Optional CUDA 12.8 PyTorch wheels.
 pip install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu128
-
 pip install -r requirements.txt
 ```
 
-Standard conda fallback:
+Fallback:
 
 ```bash
 conda create -n deepseek_moe python=3.10 -y
 conda activate deepseek_moe
-
-# Optional CUDA 12.8 PyTorch wheels.
-pip install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu128
-
 pip install -r requirements.txt
 ```
 
-The code respects existing Hugging Face variables such as `HF_ENDPOINT`, `HF_HOME`, `HF_HUB_CACHE`, and `HF_DATASETS_CACHE`. It does not overwrite or hard-code cache paths.
+Optional Stage 3 dependencies are intentionally not required for Stage 1/2:
 
-## Configuration
-
-The default config is `configs/generation_config.yaml`. Important fields are `model_name`, `dtype`, `device_map`, `prompt`, `max_new_tokens`, and `output_dir`.
-
-The generation script supports these command-line overrides:
-
-```text
---model_name
---dtype
---device_map
---prompt
---max_new_tokens
---output_dir
---offload_folder
+```bash
+pip install peft bitsandbytes
+# Optional only when explicitly using --use_wandb:
+pip install wandb
 ```
 
-## Usage
+Never put raw `HF_TOKEN`, `WANDB_API_KEY`, Bark keys, or other secrets in source files, logs, JSON outputs, or commits.
 
-Lightweight environment check:
+## Stage 1: Environment And Generation Probe
+
+Check the environment:
 
 ```bash
 python scripts/check_env.py
 ```
 
-## Online Download Stage
-
-Use this stage when the server has network access. It downloads model assets only; it does not load the model for inference and does not generate text.
-
-Download to the Hugging Face cache controlled by `HF_HOME`:
+After model assets are available, run generation:
 
 ```bash
-python scripts/download_assets.py \
-  --model_name deepseek-ai/deepseek-moe-16b-base \
-  --mode cache \
-  --resume_download
+python scripts/test_generate.py \
+  --model_name models/deepseek-moe-16b-base \
+  --local_files_only \
+  --max_new_tokens 120
 ```
 
-Download to a project-local directory:
+Outputs go to `outputs/run_YYYYMMDD_HHMMSS/summary.json`, `generated.txt`, `config_used.yaml`, and `device_map.json`.
+
+## Stage 1.5: Online Download And Offline Inference
+
+Download assets only. This does not run inference.
+
+Default local download:
+
+```bash
+python scripts/download_assets.py
+```
+
+Explicit local download:
 
 ```bash
 python scripts/download_assets.py \
   --model_name deepseek-ai/deepseek-moe-16b-base \
   --mode local \
   --local_dir models/deepseek-moe-16b-base \
+  --revision main \
   --resume_download
 ```
 
-The download script respects existing `HF_ENDPOINT`, `HF_HOME`, and `HF_TOKEN`. It prints only whether `HF_TOKEN` is set, never the raw token.
-
-## Offline Inference Stage
-
-After assets are already available in the Hugging Face cache or in a local model directory, run inference without network access by adding `--local_files_only`.
-
-Offline inference from Hugging Face cache:
+Cache download using `HF_HOME`:
 
 ```bash
-python scripts/test_generate.py \
-  --local_files_only \
-  --prompt "The history of artificial intelligence can be traced back to" \
-  --max_new_tokens 120
+python scripts/download_assets.py \
+  --model_name deepseek-ai/deepseek-moe-16b-base \
+  --mode cache \
+  --revision main \
+  --resume_download
 ```
 
-Offline inference from a project-local model directory:
+Offline generation from local directory:
 
 ```bash
 python scripts/test_generate.py \
   --model_name models/deepseek-moe-16b-base \
   --local_files_only \
-  --prompt "The history of artificial intelligence can be traced back to" \
   --max_new_tokens 120
 ```
 
-Generation with overrides:
+Manual model structure inspection:
 
 ```bash
-python scripts/test_generate.py \
-  --prompt "The future of artificial intelligence is" \
-  --max_new_tokens 120
+python scripts/inspect_model.py \
+  --model_name models/deepseek-moe-16b-base \
+  --local_files_only
 ```
 
-Generation with the optional shell logging helper:
+## Stage 2: WikiText Perplexity
+
+Default config: `configs/eval_wikitext_config.yaml`.
+
+Run only after the model and dataset are available locally:
 
 ```bash
-tlog generate.log python scripts/test_generate.py \
-  --prompt "The history of artificial intelligence can be traced back to" \
-  --max_new_tokens 120
+python scripts/eval_wikitext_ppl.py \
+  --model_name models/deepseek-moe-16b-base \
+  --local_files_only \
+  --dataset_config_name wikitext-2-raw-v1 \
+  --split test \
+  --block_size 2048 \
+  --stride 1024
 ```
 
-Model structure inspection. This also loads the model:
-
-```bash
-python scripts/inspect_model.py
-```
-
-During initial code generation and review, do not run `scripts/test_generate.py` or `scripts/inspect_model.py` unless the user explicitly accepts the model download/loading.
-
-## Output Files
-
-Each run creates a timestamped directory:
+Outputs:
 
 ```text
 outputs/run_YYYYMMDD_HHMMSS/
 |-- config_used.yaml
-|-- generated.txt
-|-- summary.json
 |-- device_map.json
-`-- model_modules.txt
+`-- eval_summary.json
 ```
 
-- `config_used.yaml`: final config after command-line overrides.
-- `generated.txt`: generated continuation text.
-- `summary.json`: run status, timing, token counts, memory snapshots, offload flags, and non-secret environment status.
-- `device_map.json`: saved `model.hf_device_map`.
-- `model_modules.txt`: model module inspection output from `scripts/inspect_model.py`.
+`eval_summary.json` records `ppl`, `total_nll`, evaluated tokens, timing, device map, and offload flags.
 
-## Judging GPU Memory Sufficiency
+## Stage 3: LoRA / QLoRA Continued Pretraining
 
-Use `summary.json` and `device_map.json` to decide whether the server is adequate for later stages:
+These are training frameworks only. Do not run them until Stage 1/2 show the hardware and local caches are ready.
 
-- `has_cpu_offload: false` and `has_disk_offload: false`: best case; the model is mainly on GPU.
-- `has_cpu_offload: true`: the model may run, but inference can be slow and later experiments may be limited.
-- `has_disk_offload: true`: memory is likely insufficient for practical experiments.
-- CUDA out-of-memory during loading or generation means the current configuration is not sufficient.
-
-Also compare GPU memory before loading, after loading, and after generation. Multi-GPU runs should show per-GPU allocated, reserved, peak, and total memory.
-
-## Common Errors
-
-CUDA unavailable:
-
-```text
-CUDA is not available. DeepSeek-MoE-16B inference is not recommended on CPU.
-```
-
-Resolution: use a CUDA-capable node and install a compatible PyTorch build.
-
-CUDA out of memory:
-
-```text
-CUDA out of memory
-```
-
-Suggestions:
-
-1. Use multiple GPUs with `device_map="auto"`.
-2. Add `max_memory` config.
-3. Use CPU offload only for loading tests.
-4. Try a smaller model first.
-5. Consider quantized loading in a later stage.
-
-Model download or access failure:
-
-1. Check network connectivity.
-2. Check Hugging Face access to the model.
-3. Check whether `HF_ENDPOINT` should be set for the mirror.
-4. Check free disk space for the Hugging Face cache.
-5. Run `huggingface-cli login` if authenticated access is required.
-
-Disk space problem:
-
-```text
-DeepSeek-MoE-16B weights are large. Please ensure sufficient disk space for Hugging Face cache.
-```
-
-## Secrets
-
-Never commit secrets. Do not write raw values for `HF_TOKEN`, `WANDB_API_KEY`, Bark keys, API keys, access tokens, or passwords into source files, logs, README examples, or JSON outputs.
-
-Scripts may report only whether secrets are set:
-
-```text
-HF_TOKEN: set
-WANDB_API_KEY: not set
-```
-
-Recommended review checks:
+LoRA:
 
 ```bash
-grep -R "hf_" . --exclude-dir=.git --exclude-dir=outputs || true
-grep -R "wandb_" . --exclude-dir=.git --exclude-dir=outputs || true
-grep -R "api.day.app" . --exclude-dir=.git --exclude-dir=outputs || true
+python scripts/train_lora.py \
+  --model_name models/deepseek-moe-16b-base \
+  --local_files_only \
+  --max_steps 100
 ```
 
-These checks can produce documentation false positives. Raw real keys must not appear.
+QLoRA:
 
-## Future Stages
+```bash
+python scripts/train_qlora.py \
+  --model_name models/deepseek-moe-16b-base \
+  --local_files_only \
+  --max_steps 100
+```
 
-- Stage 2: WikiText-2 / WikiText-103 perplexity evaluation.
-- Stage 3: LoRA / QLoRA continued pretraining on WikiText.
-- Stage 4: Inspect and modify MoE router for hard-forward p-bit-backward routing.
-- Stage 5: Compare original router against the p-bit backward surrogate router.
+WandB is disabled by default. Enable it only when needed:
 
-Do not implement these stages in this repository phase.
+```bash
+python scripts/train_qlora.py --use_wandb --local_files_only
+```
 
-## Codex Multi-Agent Note
+The scripts read WandB settings from environment variables only and must not print or save raw keys. Training outputs include `train_config_used.yaml`, `train_summary.json`, Trainer state files when produced, and adapter outputs under the run directory.
 
-Use the file ownership split in `AGENTS.md`. Agent A owns only `README.md`, `requirements.txt`, `configs/generation_config.yaml`, and `outputs/.gitkeep`. Other agents own the environment utilities, model loading/generation code, model inspection script, and final review.
+## Stage 4: p-bit Router Scaffold
 
-Allowed lightweight checks during development:
+The p-bit code is a scaffold. It does not assume DeepSeek router class names and does not patch the model automatically.
+
+Safe tensor-only test:
+
+```bash
+python scripts/test_pbit_router_unit.py
+```
+
+Manual router inspection:
+
+```bash
+python scripts/inspect_router.py \
+  --model_name models/deepseek-moe-16b-base \
+  --local_files_only
+```
+
+Inspect `router_inspection.json` and `router_inspection.txt` before any real patching. Do not replace router modules until the true DeepSeek-MoE router contract is confirmed.
+
+## Stage 5: Orchestration And Result Collection
+
+Optional shell templates default to local-only execution:
+
+```bash
+bash scripts/run_stage2_eval.sh
+bash scripts/run_stage3_qlora.sh
+bash scripts/run_stage4_router_inspect.sh
+```
+
+After any runs, collect results:
+
+```bash
+python scripts/collect_results.py
+```
+
+Outputs:
+
+```text
+outputs/results_table.csv
+outputs/results_summary.md
+```
+
+## Recommended Experiment Order
+
+1. `python scripts/check_env.py`
+2. `python scripts/download_assets.py --mode local --local_dir models/deepseek-moe-16b-base --resume_download`
+3. `python scripts/test_generate.py --model_name models/deepseek-moe-16b-base --local_files_only`
+4. `python scripts/eval_wikitext_ppl.py --model_name models/deepseek-moe-16b-base --local_files_only`
+5. `python scripts/test_pbit_router_unit.py`
+6. `python scripts/inspect_router.py --model_name models/deepseek-moe-16b-base --local_files_only`
+7. Only after the above, decide whether to run LoRA/QLoRA or router patch experiments.
+8. `python scripts/collect_results.py`
+
+## Memory Judgment
+
+- `has_cpu_offload: false` and `has_disk_offload: false`: best case.
+- `has_cpu_offload: true`: possible but likely slow.
+- `has_disk_offload: true`: not practical for later experiments.
+- CUDA OOM: use more GPUs, smaller eval slices, or defer to QLoRA/quantized experiments.
+
+## Development Checks
+
+Allowed lightweight checks:
 
 ```bash
 python -m compileall scripts src
 python scripts/check_env.py
+python scripts/test_pbit_router_unit.py
 ```
 
-Do not run commands that download or load `deepseek-ai/deepseek-moe-16b-base` unless the user explicitly requests it.
+Do not run download, generation, evaluation, training, or router inspection scripts during automated development unless explicitly requested.

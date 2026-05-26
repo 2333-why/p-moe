@@ -1,0 +1,64 @@
+model_name: "models/deepseek-moe-16b-base"
+dataset_name: "wikitext"
+dataset_config_name: "wikitext-2-raw-v1"
+train_split: "train"
+eval_split: "validation"
+
+dtype: "bf16"
+device_map: "auto"
+trust_remote_code: true
+low_cpu_mem_usage: true
+local_files_only: true
+
+output_dir: "outputs/lora"
+run_name: "deepseek_moe_lora_stage3"
+block_size: 1024
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 16
+learning_rate: 1.0e-5
+max_steps: 100
+bf16: true
+gradient_checkpointing: true
+lora_rank: 8
+lora_alpha: 16
+lora_dropout: 0.05
+save_steps: 50
+preprocessing_num_workers: 4
+
+lora:
+  r: 8
+  alpha: 16
+  dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+
+training:
+  num_train_epochs: 1
+  max_steps: 100
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16
+  learning_rate: 1.0e-5
+  weight_decay: 0.0
+  warmup_ratio: 0.03
+  lr_scheduler_type: "cosine"
+  logging_steps: 5
+  eval_steps: 50
+  save_steps: 50
+  save_total_limit: 2
+  gradient_checkpointing: true
+  bf16: true
+  fp16: false
+  optim: "adamw_torch"
+  report_to: []
+
+# TODO Stage 4:
+# Add router-specific LoRA target discovery after MoE router modules are inspected.
+#
+# TODO Stage 5:
+# Add p-bit router ablation config fields after the surrogate-router design is fixed.

@@ -2,9 +2,11 @@
 
 ## Project: DeepSeek-MoE-16B-Base Inference Probe
 
-This repository is for **Stage 1** of a larger research project on p-bit-assisted MoE routing.
+This repository started as **Stage 1** of a larger research project on p-bit-assisted MoE routing.
 
-Stage 1 is only for verifying whether `deepseek-ai/deepseek-moe-16b-base` can be loaded on the current server, whether GPU memory is sufficient, and whether the model can complete a simple text generation task.
+Stage 1 verifies whether `deepseek-ai/deepseek-moe-16b-base` can be downloaded, loaded on the current server, whether GPU memory is sufficient, and whether the model can complete a simple text generation task.
+
+The current codebase may also contain framework scaffolds for Stage 1.5 through Stage 5. These scaffolds must be safe-by-default: they may define configs, scripts, utilities, and patch plans, but agents must not run commands that download DeepSeek-MoE-16B, load the large model, evaluate WikiText, train LoRA/QLoRA, or patch the real model unless the user explicitly asks for that runtime experiment.
 
 This file is intended for Codex / coding agents. All agents must follow it.
 
@@ -29,10 +31,10 @@ The long-term plan is:
 Current repository task:
 
 ```text
-Only implement Stage 1.
+Implement Stage 1 plus safe code/config scaffolds for Stage 1.5, Stage 2, Stage 3, Stage 4, and Stage 5.
 ```
 
-Do **not** implement Stage 2/3/4/5 in this phase.
+Do **not** execute Stage 2/3/4/5 experiments in automated development. Implement only runnable scripts, configs, utilities, and documentation unless the user explicitly requests a real run.
 
 ---
 
@@ -70,12 +72,12 @@ Stage 1 is only for:
 - device map inspection;
 - model module inspection.
 
-Do not implement:
+Do not execute during automated development:
 
 - WikiText perplexity evaluation;
 - LoRA / QLoRA training;
-- p-bit router modification;
-- WandB logging;
+- DeepSeek model loading for p-bit router modification;
+- WandB online logging;
 - automatic phone notification;
 - distributed training;
 - model conversion;
@@ -95,6 +97,10 @@ Do not run:
 python scripts/download_assets.py
 python scripts/test_generate.py
 python scripts/inspect_model.py
+python scripts/eval_wikitext_ppl.py
+python scripts/train_lora.py
+python scripts/train_qlora.py
+python scripts/inspect_router.py
 ```
 
 unless the user explicitly asks to run them and accepts model download/loading.
@@ -227,7 +233,14 @@ Rules:
 - Do not log to WandB.
 - Do not save `WANDB_API_KEY`.
 
-If later training scripts use WandB, they must read `WANDB_BASE_URL` and `WANDB_API_KEY` from the environment, but must not print or save the key.
+Future-stage preference:
+
+- For Stage 2 evaluation, WandB may be used when useful for comparing repeated perplexity runs, but local JSON/CSV outputs must still be saved.
+- For Stage 3 LoRA / QLoRA training, prefer using WandB to track loss, learning rate, evaluation metrics, runtime, GPU memory summaries, checkpoint names, and experiment config.
+- For Stage 4/5 router experiments, prefer using WandB to compare baseline router vs p-bit surrogate-router variants across repeated runs.
+- Future scripts that use WandB must read `WANDB_BASE_URL` and `WANDB_API_KEY` from the environment only.
+- Future scripts must never print, save, or commit raw `WANDB_API_KEY`.
+- WandB support in future stages should be optional and controlled by a flag such as `--use_wandb`; scripts must still run without WandB.
 
 ## 3.6 PyTorch / CUDA Install Preference
 
@@ -270,7 +283,20 @@ tlog generate.log python scripts/test_generate.py
 
 Python code must not depend on this shell function.
 
-## 3.8 Phone Notification Helper
+## 3.8 Loguru
+
+Stage 1 does not require Loguru. Prefer the existing structured files (`summary.json`, `generated.txt`, `device_map.json`) plus shell `tlog` for Stage 1.
+
+Future-stage preference:
+
+- For Stage 2 evaluation, prefer Loguru for progress, per-dataset split status, recoverable data errors, and evaluation summaries.
+- For Stage 3 training, prefer Loguru for startup environment summaries, checkpoint events, periodic metric snapshots, and exception traces.
+- For Stage 4/5 router experiments, prefer Loguru for module discovery, router replacement decisions, routing statistics, and comparison run metadata.
+- Loguru logs should be written under the current run directory, for example `outputs/run_YYYYMMDD_HHMMSS/run.log`.
+- Loguru must not log raw secrets, tokens, API keys, or full environment dumps.
+- Loguru support should complement structured JSON outputs, not replace them.
+
+## 3.9 Phone Notification Helper
 
 The user's shell may define a `bark` function for phone notifications.
 

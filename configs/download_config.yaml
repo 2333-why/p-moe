@@ -1,4 +1,5 @@
 model_name: "deepseek-ai/deepseek-moe-16b-base"
-mode: "cache"
+revision: "main"
+mode: "local"
 local_dir: "models/deepseek-moe-16b-base"
 resume_download: true

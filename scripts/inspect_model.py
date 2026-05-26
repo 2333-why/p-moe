@@ -8,16 +8,22 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import torch
 import yaml
-from transformers import AutoModelForCausalLM
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.model_utils import load_causal_lm
 
 
-DEFAULT_CONFIG_PATH = Path("configs") / "generation_config.yaml"
+DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "generation_config.yaml"
 DEFAULT_MODEL_NAME = "deepseek-ai/deepseek-moe-16b-base"
 MODULE_KEYWORDS = ("moe", "gate", "router", "expert")
 
@@ -63,6 +69,12 @@ def parse_args() -> argparse.Namespace:
         "--offload_folder",
         default=None,
         help="Optional folder used by accelerate for CPU/disk offload.",
+    )
+    parser.add_argument(
+        "--local_files_only",
+        action="store_true",
+        default=None,
+        help="Load model only from local files or Hugging Face cache.",
     )
     return parser.parse_args()
 
@@ -204,24 +216,31 @@ def inspect_model(config: dict[str, Any], args: argparse.Namespace) -> tuple[str
     trust_remote_code = bool(config.get("trust_remote_code", True))
     low_cpu_mem_usage = bool(config.get("low_cpu_mem_usage", True))
     offload_folder = args.offload_folder or config.get("offload_folder")
+    local_files_only = (
+        bool(args.local_files_only)
+        if args.local_files_only is not None
+        else bool(config.get("local_files_only", False))
+    )
 
     run_dir = create_run_dir(output_dir)
     output_path = run_dir / "model_modules.txt"
 
     print(f"Loading model for inspection: {model_name}")
     print(f"dtype={dtype_name}, device_map={device_map}")
-    print("This may download large weights if they are not already cached.")
+    if local_files_only:
+        print("local_files_only=True: using local files or Hugging Face cache only.")
+    else:
+        print("This may download large weights if they are not already cached.")
 
-    load_kwargs: dict[str, Any] = {
-        "torch_dtype": resolve_dtype(dtype_name),
-        "device_map": device_map,
-        "trust_remote_code": trust_remote_code,
-        "low_cpu_mem_usage": low_cpu_mem_usage,
-    }
-    if offload_folder:
-        load_kwargs["offload_folder"] = offload_folder
-
-    model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
+    model = load_causal_lm(
+        model_name=model_name,
+        dtype_name=dtype_name,
+        device_map=device_map,
+        trust_remote_code=trust_remote_code,
+        low_cpu_mem_usage=low_cpu_mem_usage,
+        offload_folder=offload_folder,
+        local_files_only=local_files_only,
+    )
     report = build_report(model, model_name)
 
     output_path.write_text(report, encoding="utf-8")
