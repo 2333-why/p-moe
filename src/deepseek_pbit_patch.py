@@ -90,6 +90,23 @@ def apply_deepseek_pbit_patch(
     }
 
 
+def apply_deepseek_gate_metric_patch(model: nn.Module) -> Dict[str, Any]:
+    """Wrap DeepSeek gates to record hard routing metrics without changing outputs."""
+
+    patched: list[str] = []
+    for name, module in list_deepseek_moe_gates(model):
+        if getattr(module, "_pmoe_pbit_patched", False) or getattr(module, "_pmoe_metric_patched", False):
+            continue
+        module._pmoe_original_forward = module.forward
+        module._pmoe_metric_name = name
+        module._pmoe_metric_patched = True
+        module.forward = MethodType(_metric_gate_forward, module)
+        patched.append(name)
+    if not patched:
+        return {"enabled": False, "patched_modules": [], "num_patched": 0}
+    return {"enabled": True, "patched_modules": patched, "num_patched": len(patched)}
+
+
 def collect_deepseek_pbit_metrics(model: nn.Module) -> Dict[str, Any]:
     """Collect aggregate p-bit gate metrics from patched DeepSeek modules."""
 
@@ -100,7 +117,7 @@ def collect_deepseek_pbit_metrics(model: nn.Module) -> Dict[str, Any]:
     router_grad_norms: list[float] = []
 
     for name, module in list_deepseek_moe_gates(model):
-        if not getattr(module, "_pmoe_pbit_patched", False):
+        if not (getattr(module, "_pmoe_pbit_patched", False) or getattr(module, "_pmoe_metric_patched", False)):
             continue
         load = getattr(module, "_pmoe_load_ema", None)
         hard_mask = getattr(module, "_pmoe_last_hard_mask", None)
@@ -152,6 +169,21 @@ def _patch_gate_module(module: nn.Module, name: str, config: DeepSeekPBitPatchCo
     module._pmoe_pbit_name = name
     module._pmoe_pbit_patched = True
     module.forward = MethodType(_pbit_gate_forward, module)
+
+
+def _metric_gate_forward(self: nn.Module, hidden_states: Tensor):
+    """DeepSeek ``MoEGate.forward`` wrapper that records hard top-k metrics."""
+
+    topk_idx, topk_weight, aux_loss = self._pmoe_original_forward(hidden_states)
+    hard_mask = torch.zeros(
+        topk_idx.shape[0],
+        int(self.n_routed_experts),
+        device=topk_idx.device,
+        dtype=topk_weight.dtype,
+    ).scatter_(-1, topk_idx, 1.0)
+    self._pmoe_last_hard_mask = hard_mask.detach()
+    self._pmoe_last_topk_idx = topk_idx.detach()
+    return topk_idx, topk_weight, aux_loss
 
 
 def _pbit_gate_forward(self: nn.Module, hidden_states: Tensor):

@@ -29,6 +29,7 @@ seed: 42
 # Baseline/p-bit switch.
 use_pbit_patch: true
 freeze_non_router: true
+record_router_metrics: true
 
 # p-bit router parameters.
 alpha: 0.1

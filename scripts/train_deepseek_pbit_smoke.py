@@ -24,6 +24,7 @@ import yaml
 from src.data_utils import extract_nonempty_texts, load_wikitext_dataset
 from src.deepseek_pbit_patch import (
     DeepSeekPBitPatchConfig,
+    apply_deepseek_gate_metric_patch,
     apply_deepseek_pbit_patch,
     collect_deepseek_pbit_metrics,
 )
@@ -127,11 +128,16 @@ def run_smoke_training(config: Dict[str, Any]) -> Dict[str, Any]:
                 patch_train_only=bool(config.get("patch_train_only", True)),
             ),
         )
+    elif bool(config.get("record_router_metrics", True)):
+        patch_report = apply_deepseek_gate_metric_patch(model)
 
-    if bool(config.get("gradient_checkpointing", False)) and hasattr(model, "gradient_checkpointing_enable"):
-        model.gradient_checkpointing_enable()
     if bool(config.get("freeze_non_router", True)):
         _freeze_non_router_parameters(model)
+    if bool(config.get("gradient_checkpointing", False)) and hasattr(model, "gradient_checkpointing_enable"):
+        if hasattr(model, "config"):
+            model.config.use_cache = False
+        model.gradient_checkpointing_enable()
+        _enable_input_require_grads(model)
 
     model.train()
     trainable_parameters = [param for param in model.parameters() if param.requires_grad]
@@ -220,6 +226,24 @@ def _freeze_non_router_parameters(model: Any) -> None:
 
     for name, param in model.named_parameters():
         param.requires_grad = name.endswith(".mlp.gate.weight") or ".mlp.gate.weight" in name
+
+
+def _enable_input_require_grads(model: Any) -> None:
+    """Ensure checkpointed frozen embeddings still pass gradients to routers."""
+
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+        return
+
+    embeddings = model.get_input_embeddings() if hasattr(model, "get_input_embeddings") else None
+    if embeddings is None:
+        return
+
+    def make_inputs_require_grad(_module: Any, _inputs: Any, output: Any) -> None:
+        if hasattr(output, "requires_grad_"):
+            output.requires_grad_(True)
+
+    embeddings.register_forward_hook(make_inputs_require_grad)
 
 
 def _load_training_tokens(tokenizer: Any, config: Dict[str, Any]):
