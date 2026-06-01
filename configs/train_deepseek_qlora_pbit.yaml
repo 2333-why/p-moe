@@ -1,0 +1,62 @@
+# DeepSeek-MoE QLoRA continued pretraining with optional p-bit router patch.
+model_name: deepseek-ai/deepseek-moe-16b-base
+output_dir: outputs/deepseek_qlora_pbit
+local_files_only: true
+trust_remote_code: true
+
+dataset_name: wikitext
+dataset_config_name: wikitext-2-raw-v1
+dataset_split: train
+text_column: text
+block_size: 1024
+preprocessing_num_workers:
+
+bf16: true
+fp16: false
+gradient_checkpointing: true
+
+max_steps: 1000
+num_train_epochs: 1.0
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+learning_rate: 1.0e-4
+weight_decay: 0.0
+warmup_steps: 50
+lr_scheduler_type: cosine
+optim: paged_adamw_8bit
+logging_steps: 10
+save_steps: 500
+save_total_limit: 2
+dataloader_num_workers: 0
+overwrite_output_dir: false
+
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+lora_target_modules: q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj
+lora_bias: none
+task_type: CAUSAL_LM
+
+bnb_4bit_quant_type: nf4
+bnb_4bit_use_double_quant: true
+bnb_4bit_compute_dtype: bf16
+device_map: auto
+prepare_model_for_kbit_training: true
+
+use_wandb: false
+wandb_project: p-moe
+run_name: deepseek_qlora_pbit
+seed: 42
+
+use_pbit_patch: true
+train_router: true
+record_router_metrics: true
+
+alpha: 0.0
+beta: 0.01
+temperature: 1.0
+min_temperature: 0.2
+load_ema_decay: 0.99
+use_load_bias: true
+use_competition: true
+patch_train_only: true

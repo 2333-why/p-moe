@@ -281,6 +281,37 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/train_deepseek_pbit_smoke.py \
 
 The first DeepSeek p-bit run should stay small, for example `max_steps: 20`, `block_size: 512`, and `freeze_non_router: true`. This only checks that forward/backward works, router gradients exist, and load metrics are recorded. It is not enough for a paper claim.
 
+## DeepSeek QLoRA + p-bit Training
+
+For a more complete DeepSeek experiment, use QLoRA continued pretraining so adapter parameters participate in training while the router can also be trained and optionally patched with p-bit backward:
+
+```bash
+python scripts/train_deepseek_qlora_pbit.py \
+  --config configs/train_deepseek_qlora_pbit.yaml \
+  --no_pbit_patch \
+  --output_dir "$PMOE_OUT/deepseek_qlora_baseline_1000"
+```
+
+```bash
+python scripts/train_deepseek_qlora_pbit.py \
+  --config configs/train_deepseek_qlora_pbit.yaml \
+  --use_pbit_patch \
+  --alpha 0.0 \
+  --beta 0.01 \
+  --temperature 1.0 \
+  --output_dir "$PMOE_OUT/deepseek_qlora_pbit_1000"
+```
+
+Evaluate saved adapters with:
+
+```bash
+python scripts/eval_deepseek_adapter_ppl.py \
+  --base_model deepseek-ai/deepseek-moe-16b-base \
+  --adapter_path "$PMOE_OUT/deepseek_qlora_pbit_1000" \
+  --output_dir "$PMOE_OUT" \
+  --local_files_only
+```
+
 ## Mini-MoE Workflow
 
 The Mini-MoE line is the main controllable algorithm validation path.
