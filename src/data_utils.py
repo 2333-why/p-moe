@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from datasets import DownloadConfig, load_dataset
-
 
 LOCAL_DATASET_SUGGESTION = """Dataset loading failed in local_files_only mode.
 Suggestions:
@@ -35,6 +33,11 @@ def load_wikitext_dataset(
     message so evaluation runs fail with actionable guidance instead of a long
     cache traceback.
     """
+    try:
+        from datasets import DownloadConfig, load_dataset
+    except ImportError as exc:
+        raise ImportError("WikiText evaluation requires datasets. Install it with: pip install datasets") from exc
+
     download_config = DownloadConfig(local_files_only=local_files_only)
     try:
         if dataset_config_name:

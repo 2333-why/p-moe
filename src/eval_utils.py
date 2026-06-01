@@ -43,8 +43,9 @@ def compute_sliding_window_ppl(
     """
     Compute standard causal LM perplexity with overlapping sliding windows.
 
-    The loss is accumulated only over the newly evaluated target tokens in each
-    window, matching the common Hugging Face fixed-length PPL recipe.
+    The loss is accumulated only over labels that remain valid after the
+    causal-language-model left shift. Labels outside the current target span
+    are set to -100 and therefore ignored by the model loss.
     """
     if block_size <= 1:
         raise ValueError("block_size must be greater than 1.")
@@ -81,10 +82,17 @@ def compute_sliding_window_ppl(
             target_ids = input_window.clone()
             target_ids[:, :-trg_len] = -100
 
+            loss_target_tokens = int((target_ids[:, 1:] != -100).sum().item())
+            if loss_target_tokens == 0:
+                prev_end_loc = end_loc
+                if end_loc >= eval_tokens:
+                    break
+                continue
+
             outputs = model(input_window, labels=target_ids)
-            neg_log_likelihood = float(outputs.loss.detach().cpu()) * trg_len
+            neg_log_likelihood = float(outputs.loss.detach().cpu()) * loss_target_tokens
             nll_sum += neg_log_likelihood
-            target_token_count += trg_len
+            target_token_count += loss_target_tokens
 
             prev_end_loc = end_loc
             if end_loc >= eval_tokens:
@@ -95,13 +103,14 @@ def compute_sliding_window_ppl(
         raise ValueError("No target tokens were evaluated.")
 
     mean_nll = nll_sum / target_token_count
-    perplexity = math.exp(mean_nll)
+    perplexity = math.exp(mean_nll) if mean_nll < 709 else float("inf")
     return {
         "ppl": perplexity,
         "perplexity": perplexity,
         "mean_nll": mean_nll,
         "total_nll": nll_sum,
         "total_tokens": total_tokens,
+        "total_target_tokens": target_token_count,
         "total_eval_tokens": target_token_count,
         "eval_tokens": eval_tokens,
         "target_tokens": target_token_count,

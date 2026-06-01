@@ -1,169 +1,231 @@
-"""Model and tokenizer loading helpers for Stage 1 inference."""
+"""Model and tokenizer loading helpers for DeepSeek/MoE scaffolding.
+
+No model or tokenizer is loaded at import time. Callers opt into loading via
+explicit functions and may force offline behavior with ``local_files_only``.
+"""
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+
+def parse_torch_dtype(dtype_name: str | None):
+    """Map bf16/fp16/fp32/auto strings to torch dtype values."""
+
+    if dtype_name is None or dtype_name == "auto":
+        return "auto"
+    try:
+        import torch
+    except Exception as exc:  # pragma: no cover - dependency diagnostic
+        raise RuntimeError(f"PyTorch is required to parse dtype {dtype_name!r}: {exc}") from exc
+
+    normalized = dtype_name.lower()
+    if normalized in {"bf16", "bfloat16"}:
+        return torch.bfloat16
+    if normalized in {"fp16", "float16", "half"}:
+        return torch.float16
+    if normalized in {"fp32", "float32", "full"}:
+        return torch.float32
+    raise ValueError("Unsupported dtype. Expected one of: auto, bf16, fp16, fp32.")
 
 
-OOM_SUGGESTION = """Suggestions:
-1. Use multiple GPUs with device_map="auto".
-2. Add max_memory config.
-3. Use CPU offload only for loading tests.
-4. Try a smaller model first.
-5. Consider quantized loading in a later stage."""
+def local_model_exists(model_name: str) -> bool:
+    """Return true when model_name points to an existing local path."""
 
-DOWNLOAD_SUGGESTION = """Suggestions:
-1. Check the network connection.
-2. Check Hugging Face access.
-3. Check whether HF_ENDPOINT should be set.
-4. Check disk space.
-5. Check whether huggingface-cli login is required."""
-
-DISK_SUGGESTION = (
-    "DeepSeek-MoE-16B weights are large. Please ensure sufficient disk space "
-    "for Hugging Face cache."
-)
+    return Path(model_name).expanduser().exists()
 
 
-def resolve_dtype(dtype_name: str):
-    """
-    Support bf16, fp16, and fp32.
-    bf16 -> torch.bfloat16
-    fp16 -> torch.float16
-    fp32 -> torch.float32
-    """
-    normalized = dtype_name.lower().strip()
-    dtype_map = {
-        "bf16": torch.bfloat16,
-        "bfloat16": torch.bfloat16,
-        "fp16": torch.float16,
-        "float16": torch.float16,
-        "half": torch.float16,
-        "fp32": torch.float32,
-        "float32": torch.float32,
+def build_model_load_kwargs(
+    *,
+    dtype: str = "bf16",
+    device_map: str | None = "auto",
+    local_files_only: bool = False,
+    offload_folder: str | None = None,
+    trust_remote_code: bool = True,
+    revision: str | None = None,
+    low_cpu_mem_usage: bool = True,
+) -> dict[str, Any]:
+    """Build kwargs for ``AutoModelForCausalLM.from_pretrained``."""
+
+    kwargs: dict[str, Any] = {
+        "torch_dtype": parse_torch_dtype(dtype),
+        "local_files_only": local_files_only,
+        "trust_remote_code": trust_remote_code,
+        "low_cpu_mem_usage": low_cpu_mem_usage,
     }
-    if normalized not in dtype_map:
-        valid = ", ".join(sorted(dtype_map))
-        raise ValueError(f"Unsupported dtype '{dtype_name}'. Expected one of: {valid}")
-    return dtype_map[normalized]
+    if device_map:
+        kwargs["device_map"] = device_map
+    if revision:
+        kwargs["revision"] = revision
+    if offload_folder:
+        kwargs["offload_folder"] = offload_folder
+        kwargs["offload_state_dict"] = True
+        Path(offload_folder).mkdir(parents=True, exist_ok=True)
+    return kwargs
+
+
+def explain_load_error(exc: BaseException, *, model_name: str, local_files_only: bool) -> RuntimeError:
+    """Convert common loading failures into clear actionable errors."""
+
+    text = str(exc)
+    lower = text.lower()
+    prefix = f"Failed to load model/tokenizer {model_name!r}."
+    if "cuda out of memory" in lower or "outofmemoryerror" in lower:
+        return RuntimeError(
+            f"{prefix} CUDA OOM. Try --device_map auto, --offload_folder outputs/offload, "
+            "--dtype fp16/bf16, a smaller model, or more GPU memory."
+        )
+    if local_files_only and ("couldn't find" in lower or "not found" in lower or "no such file" in lower):
+        return RuntimeError(
+            f"{prefix} Local files were requested but required files are missing. "
+            "Run scripts/download_assets.py first or pass the correct local model path."
+        )
+    if "no space left on device" in lower or "disk quota" in lower:
+        return RuntimeError(f"{prefix} Disk space is insufficient. Check HF_HOME/cache and offload folders.")
+    if "connection" in lower or "timed out" in lower or "offline" in lower:
+        return RuntimeError(
+            f"{prefix} Network/cache access failed. For offline runs, pass --local_files_only "
+            "and point --model_name to a downloaded local directory."
+        )
+    if "trust_remote_code" in lower:
+        return RuntimeError(f"{prefix} This model may require --trust_remote_code.")
+    return RuntimeError(f"{prefix} Original error: {type(exc).__name__}: {exc}")
 
 
 def load_tokenizer(
     model_name: str,
-    trust_remote_code: bool = True,
+    *,
     local_files_only: bool = False,
+    revision: str | None = None,
+    trust_remote_code: bool = True,
+    use_fast: bool | None = None,
 ):
-    """
-    Load tokenizer.
-    If pad_token_id is missing, try to set it to eos_token_id.
-    """
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
-            trust_remote_code=trust_remote_code,
-            use_fast=True,
-            local_files_only=local_files_only,
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to load tokenizer for '{model_name}'.\n{classify_exception(exc)}"
-        ) from exc
+    """Load a tokenizer with explicit offline and revision controls."""
 
-    if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
+    try:
+        from transformers import AutoTokenizer
+    except Exception as exc:  # pragma: no cover - dependency diagnostic
+        raise RuntimeError("transformers is required to load tokenizers. Install requirements.txt.") from exc
+
+    kwargs: dict[str, Any] = {
+        "local_files_only": local_files_only,
+        "trust_remote_code": trust_remote_code,
+    }
+    if revision:
+        kwargs["revision"] = revision
+    if use_fast is not None:
+        kwargs["use_fast"] = use_fast
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_name, **kwargs)
+    except Exception as exc:
+        raise explain_load_error(exc, model_name=model_name, local_files_only=local_files_only) from exc
+    if tokenizer.pad_token is None and tokenizer.eos_token is not None:
         tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
 
 
 def load_causal_lm(
     model_name: str,
-    dtype_name: str = "bf16",
-    device_map: str | dict[str, Any] | None = "auto",
+    *,
+    dtype: str = "bf16",
+    dtype_name: str | None = None,
+    device_map: str | None = "auto",
+    local_files_only: bool = False,
+    offload_folder: str | None = None,
+    revision: str | None = None,
     trust_remote_code: bool = True,
     low_cpu_mem_usage: bool = True,
-    max_memory: dict[str, Any] | None = None,
-    offload_folder: str | None = None,
-    local_files_only: bool = False,
 ):
-    """
-    Load AutoModelForCausalLM and return the model.
-    """
-    resolved_dtype = resolve_dtype(dtype_name)
-    kwargs: dict[str, Any] = {
-        "torch_dtype": resolved_dtype,
-        "device_map": device_map,
-        "trust_remote_code": trust_remote_code,
-        "low_cpu_mem_usage": low_cpu_mem_usage,
-        "local_files_only": local_files_only,
-    }
-    if max_memory is not None:
-        kwargs["max_memory"] = max_memory
-    if offload_folder:
-        kwargs["offload_folder"] = offload_folder
+    """Load a causal language model with clear DeepSeek-friendly defaults."""
 
     try:
-        model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
-    except torch.cuda.OutOfMemoryError as exc:
-        raise RuntimeError(f"CUDA out of memory while loading model.\n{OOM_SUGGESTION}") from exc
-    except Exception as exc:
+        from transformers import AutoModelForCausalLM
+    except Exception as exc:  # pragma: no cover - dependency diagnostic
+        raise RuntimeError("transformers is required to load causal LMs. Install requirements.txt.") from exc
+
+    if local_files_only and not local_model_exists(model_name):
         raise RuntimeError(
-            f"Failed to load model '{model_name}'.\n{classify_exception(exc)}"
-        ) from exc
+            f"Local model path {model_name!r} does not exist while --local_files_only is set. "
+            "Download assets first or pass a valid local directory."
+        )
+    kwargs = build_model_load_kwargs(
+        dtype=dtype_name or dtype,
+        device_map=device_map,
+        local_files_only=local_files_only,
+        offload_folder=offload_folder,
+        trust_remote_code=trust_remote_code,
+        revision=revision,
+        low_cpu_mem_usage=low_cpu_mem_usage,
+    )
+    try:
+        return AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+    except Exception as exc:
+        raise explain_load_error(exc, model_name=model_name, local_files_only=local_files_only) from exc
 
-    hf_device_map = getattr(model, "hf_device_map", None)
-    if hf_device_map is not None:
-        print("hf_device_map:")
-        print(hf_device_map)
-        has_cpu, has_disk = detect_offload(hf_device_map)
-        if has_cpu:
-            print("Warning: hf_device_map contains CPU offload. Inference may be slow.")
-        if has_disk:
-            print("Warning: hf_device_map contains disk offload. Memory is likely insufficient.")
-    else:
-        print("hf_device_map is not available on the loaded model.")
-    return model
+
+def infer_offload_status(model: Any) -> dict[str, Any]:
+    """Infer whether accelerate dispatched any modules to CPU or disk."""
+
+    device_map = getattr(model, "hf_device_map", None)
+    if not isinstance(device_map, dict):
+        return {"has_device_map": False, "cpu_modules": 0, "disk_modules": 0, "device_map": None}
+    values = [str(value) for value in device_map.values()]
+    return {
+        "has_device_map": True,
+        "cpu_modules": sum(value == "cpu" for value in values),
+        "disk_modules": sum(value == "disk" for value in values),
+        "device_map": device_map,
+    }
 
 
-def detect_offload(hf_device_map: dict[str, Any] | None) -> tuple[bool, bool]:
-    """
-    Return whether a Hugging Face device map contains CPU or disk offload.
-    """
-    if not hf_device_map:
-        return False, False
-    values = [str(value).lower() for value in hf_device_map.values()]
+def detect_offload(device_map: dict[str, Any]) -> tuple[bool, bool]:
+    """Return whether a serialized device map uses CPU or disk offload."""
+
+    values = [str(value).lower() for value in device_map.values()]
     return any(value == "cpu" for value in values), any(value == "disk" for value in values)
 
 
 def classify_exception(exc: BaseException) -> str:
-    """
-    Return an actionable, secret-safe suggestion for common model loading failures.
-    """
-    message = str(exc)
-    lowered = message.lower()
-    if "cuda out of memory" in lowered:
-        return OOM_SUGGESTION
-    if any(term in lowered for term in ("no space left", "disk quota", "errno 28")):
-        return DISK_SUGGESTION
-    if any(
-        term in lowered
-        for term in (
-            "connection",
-            "timed out",
-            "timeout",
-            "http",
-            "401",
-            "403",
-            "404",
-            "repository not found",
-            "gated",
-            "huggingface",
-            "couldn't connect",
-        )
-    ):
-        return DOWNLOAD_SUGGESTION
-    return (
-        "Check the traceback above, installed package versions, available GPU memory, "
-        "Hugging Face access, and free disk space."
-    )
+    """Return a concise, secret-safe suggestion for common runtime failures."""
+
+    text = str(exc).lower()
+    if "out of memory" in text or "cuda" in text and "memory" in text:
+        return "CUDA memory error. Try smaller block/stride settings, offload, or a larger GPU."
+    if "local" in text and ("not found" in text or "missing" in text):
+        return "Local files are missing. Download assets first or pass a valid local path."
+    if "dataset" in text or "cache" in text:
+        return "Dataset cache/load error. Verify dataset config, split, and HF cache settings."
+    if "transformers" in text or "datasets" in text:
+        return "Missing dependency. Install requirements.txt in the active environment."
+    return f"{type(exc).__name__}: review the saved traceback and command arguments."
+
+
+def model_parameter_summary(model: Any) -> dict[str, Any]:
+    """Return a compact parameter count and dtype/device summary."""
+
+    total = 0
+    trainable = 0
+    dtype_counts: dict[str, int] = {}
+    device_counts: dict[str, int] = {}
+    for param in model.parameters():
+        count = int(param.numel())
+        total += count
+        if param.requires_grad:
+            trainable += count
+        dtype_counts[str(param.dtype)] = dtype_counts.get(str(param.dtype), 0) + count
+        device_counts[str(param.device)] = device_counts.get(str(param.device), 0) + count
+    return {
+        "parameters": total,
+        "trainable_parameters": trainable,
+        "dtype_counts": dtype_counts,
+        "device_counts": device_counts,
+    }
+
+
+def huggingface_token_kwargs() -> dict[str, Any]:
+    """Return a token kwarg without exposing token values in logs."""
+
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+    return {"token": token} if token else {}

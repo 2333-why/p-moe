@@ -1,122 +1,101 @@
-"""Safe p-bit router patch planning scaffold.
+"""Safe scaffold for p-bit router patch planning.
 
-These helpers never guess a DeepSeek router replacement automatically. Inspect
-the model first, review the candidate module names, then patch an explicit
-module name only when the router contract is understood.
+This module intentionally does not mutate DeepSeek or any other model unless an
+explicit unsupported apply call is made. It is a planning surface for inspection
+results and future model-specific patch code.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable
+from dataclasses import asdict, dataclass
+from typing import Any, Dict, Iterable, List, Optional
 
-from torch import nn
-
-from src.pbit_router import PBitBackwardRouter, PBitRouterConfig
+from .pbit_router import PBitRouterConfig
 
 
-ROUTER_KEYWORDS = ("gate", "router", "moe", "expert")
-
-
-@dataclass(frozen=True, slots=True)
-class RouterLikeModule:
-    """Summary of a module whose name or class looks router-related."""
+@dataclass
+class RouterPatchTarget:
+    """Description of a candidate router module found during inspection."""
 
     name: str
     class_name: str
-    module: nn.Module
+    module_path: str
+    num_experts: Optional[int] = None
+    top_k: Optional[int] = None
+    notes: str = ""
 
-    def to_dict(self) -> dict[str, str]:
-        """Return a JSON-safe module summary."""
-        return {"name": self.name, "class_name": self.class_name}
+
+@dataclass
+class RouterPatchPlan:
+    """Serializable patch plan for future manual review."""
+
+    model_name: str
+    targets: List[RouterPatchTarget]
+    pbit_config: Dict[str, Any]
+    scaffold_only: bool = True
+    warning: str = "Patch application is intentionally disabled until a model-specific adapter is reviewed."
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a JSON-serializable patch plan."""
+        return {
+            "model_name": self.model_name,
+            "targets": [asdict(target) for target in self.targets],
+            "pbit_config": self.pbit_config,
+            "scaffold_only": self.scaffold_only,
+            "warning": self.warning,
+        }
 
 
-def list_router_like_modules(
-    model: nn.Module,
-    keywords: Iterable[str] = ROUTER_KEYWORDS,
-) -> list[RouterLikeModule]:
-    """List modules whose name or class contains gate/router/moe/expert."""
-    lowered_keywords = tuple(keyword.lower() for keyword in keywords)
-    if not lowered_keywords:
-        raise ValueError("At least one router keyword is required.")
-    matches: list[RouterLikeModule] = []
+def list_candidate_router_modules(model: Any, name_keywords: Optional[Iterable[str]] = None) -> List[RouterPatchTarget]:
+    """List modules whose names or class names look router-related."""
+    keywords = tuple(k.lower() for k in (name_keywords or ("router", "gate", "moe", "expert")))
+    targets: List[RouterPatchTarget] = []
     for name, module in model.named_modules():
-        if not name:
-            continue
-        haystack = f"{name} {module.__class__.__name__}".lower()
-        if any(keyword in haystack for keyword in lowered_keywords):
-            matches.append(RouterLikeModule(name, module.__class__.__name__, module))
-    return matches
+        class_name = module.__class__.__name__
+        haystack = f"{name} {class_name}".lower()
+        if any(keyword in haystack for keyword in keywords):
+            targets.append(
+                RouterPatchTarget(
+                    name=name,
+                    class_name=class_name,
+                    module_path=f"{module.__class__.__module__}.{class_name}",
+                    num_experts=_maybe_int_attr(module, ("num_experts", "n_routed_experts", "n_experts")),
+                    top_k=_maybe_int_attr(module, ("top_k", "num_experts_per_tok", "k")),
+                )
+            )
+    return targets
 
 
-def build_router_patch_plan(model: nn.Module) -> dict[str, object]:
-    """Build a review-only patch plan from router-like module candidates."""
-    candidates = list_router_like_modules(model)
-    return {
-        "candidate_count": len(candidates),
-        "candidates": [candidate.to_dict() for candidate in candidates],
-        "warning": (
-            "This is an inspection scaffold. Do not patch until the true "
-            "DeepSeek-MoE router contract has been confirmed."
-        ),
-    }
+def build_patch_plan(
+    model: Any,
+    model_name: str,
+    config: PBitRouterConfig,
+    name_keywords: Optional[Iterable[str]] = None,
+) -> RouterPatchPlan:
+    """Build a scaffold-only p-bit router patch plan from an inspected model."""
+    targets = list_candidate_router_modules(model, name_keywords=name_keywords)
+    return RouterPatchPlan(model_name=model_name, targets=targets, pbit_config=asdict(config))
 
 
-def apply_pbit_patch(
-    model: nn.Module,
-    module_name: str,
-    config: PBitRouterConfig | None = None,
-) -> nn.Module:
-    """Patch one explicit module name with ``PBitBackwardRouter``.
-
-    The function intentionally refuses empty names and unknown modules. If the
-    correct router name is unclear, run ``scripts/inspect_router.py`` first.
-    """
-    if not module_name:
-        raise ValueError("module_name is required. Run inspect_router.py first.")
-    named_modules = dict(model.named_modules())
-    if module_name not in named_modules:
-        raise KeyError(
-            f"Module '{module_name}' was not found. Run inspect_router.py and "
-            "choose one exact router-like module name."
+def apply_patch_plan(model: Any, plan: RouterPatchPlan, explicit: bool = False) -> Any:
+    """Refuse to patch by default; future adapters must opt in explicitly."""
+    if not explicit:
+        raise RuntimeError(
+            "Router patching is scaffold-only. Re-run after implementing and reviewing a "
+            "model-specific adapter, then call with explicit=True."
         )
-
-    if "." in module_name:
-        parent_name, child_name = module_name.rsplit(".", 1)
-        parent = named_modules.get(parent_name)
-    else:
-        parent_name, child_name = "<root>", module_name
-        parent = model
-    if parent is None:
-        raise KeyError(f"Parent module '{parent_name}' was not found.")
-
-    child = getattr(parent, child_name, None)
-    if child is None:
-        raise AttributeError(f"Parent module '{parent_name}' has no child '{child_name}'.")
-    if not isinstance(child, nn.Module):
-        raise TypeError(f"Attribute '{module_name}' is not an nn.Module.")
-    if isinstance(child, PBitBackwardRouter):
-        raise TypeError(f"Module '{module_name}' is already wrapped with PBitBackwardRouter.")
-
-    setattr(parent, child_name, PBitBackwardRouter(child, config=config, router_name=module_name))
-    return model
+    raise NotImplementedError(
+        "No model-specific p-bit router patch adapter is implemented. Inspect router modules first "
+        "and add an adapter for the exact target architecture."
+    )
 
 
-# Backward-compatible aliases for earlier scaffold names.
-list_router_candidates = list_router_like_modules
-apply_pbit_router_patch = lambda model, router_names, config=None: _apply_many(model, router_names, config)
-
-
-def _apply_many(
-    model: nn.Module,
-    router_names: Iterable[str],
-    config: PBitRouterConfig | None = None,
-) -> list[str]:
-    """Patch multiple explicit router names and return the patched names."""
-    patched: list[str] = []
-    for name in router_names:
-        apply_pbit_patch(model, name, config=config)
-        patched.append(name)
-    if not patched:
-        raise ValueError("No router names were provided. Run inspect_router.py first.")
-    return patched
+def _maybe_int_attr(module: Any, names: Iterable[str]) -> Optional[int]:
+    """Return the first integer-like module attribute from names."""
+    for name in names:
+        value = getattr(module, name, None)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            return value
+    return None

@@ -1,15 +1,27 @@
-model_name: "deepseek-ai/deepseek-moe-16b-base"
+# Stage 1: offline generation defaults.
+model:
+  model_name: models/deepseek-moe-16b-base
+  tokenizer_name: null
+  local_files_only: true
+  trust_remote_code: true
+  torch_dtype: auto
+  device_map: auto
+  offload_folder: outputs/offload
 
-dtype: "bf16"
-device_map: "auto"
-trust_remote_code: true
-low_cpu_mem_usage: true
+generation:
+  prompt: "Explain sparse mixture-of-experts routing in one paragraph."
+  max_new_tokens: 120
+  do_sample: false
+  temperature: 0.7
+  top_p: 0.95
+  top_k: 50
+  repetition_penalty: 1.0
 
-prompt: "The history of artificial intelligence can be traced back to"
-max_new_tokens: 120
-do_sample: true
-temperature: 0.7
-top_p: 0.9
-repetition_penalty: 1.05
+output:
+  output_dir: outputs/run_stage1_generate
+  save_summary: true
+  save_text: true
 
-output_dir: "outputs"
+safety:
+  print_env: false
+  print_secrets: false

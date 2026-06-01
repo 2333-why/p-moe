@@ -182,6 +182,11 @@ def write_failure_summary(
         "dataset_name": config.get("dataset_name"),
         "dataset_config_name": config.get("dataset_config_name"),
         "split": config.get("split"),
+        "text_column": config.get("text_column", "text"),
+        "block_size": config.get("block_size", 2048),
+        "stride": config.get("stride", 1024),
+        "max_eval_tokens": config.get("max_eval_tokens"),
+        "output_dir": config.get("output_dir"),
         "load_success": load_success,
         "eval_success": False,
         "error_type": type(exc).__name__,
@@ -223,7 +228,10 @@ def main() -> int:
     config = apply_overrides(load_config(args.config), args)
     run_dir = Path(create_run_dir(config.get("output_dir", "outputs")))
     print(f"Run directory: {run_dir}")
-    save_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), str(run_dir / "config_used.yaml"))
+    save_text(
+        yaml.safe_dump(config, sort_keys=False, allow_unicode=True),
+        str(run_dir / "eval_config_used.yaml"),
+    )
 
     env = env_summary()
     print_environment_summary(env)
@@ -293,6 +301,10 @@ def main() -> int:
             "dataset_config_name": config.get("dataset_config_name"),
             "split": config["split"],
             "text_column": config.get("text_column", "text"),
+            "block_size": config.get("block_size", 2048),
+            "stride": config.get("stride", 1024),
+            "max_eval_tokens": config.get("max_eval_tokens"),
+            "output_dir": config.get("output_dir"),
             "load_success": True,
             "eval_success": True,
             **eval_result,

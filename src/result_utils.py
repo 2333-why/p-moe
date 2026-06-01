@@ -1,274 +1,240 @@
-"""Utilities for collecting experiment summaries into reviewable tables."""
+"""Utilities for aggregating p-MoE experiment result summaries."""
 
 from __future__ import annotations
 
 import csv
 import json
-import re
+from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 
-RESULT_FIELDS = [
+RESULT_FIELDS = (
     "run_dir",
-    "summary_file",
     "stage",
-    "timestamp",
     "model_name",
-    "dtype",
-    "dataset",
-    "split",
-    "status",
-    "load_success",
-    "generation_success",
-    "eval_success",
-    "train_success",
-    "inspect_success",
-    "perplexity",
-    "eval_loss",
+    "method",
+    "success",
+    "failure",
+    "ppl",
     "train_loss",
-    "loss",
-    "new_tokens",
     "tokens_per_sec",
+    "load_variance",
+    "dead_expert_ratio",
+    "expert_entropy",
     "has_cpu_offload",
     "has_disk_offload",
-    "peak_gpu_memory_gb",
-    "error_type",
     "error_message",
-    "summary_path",
-]
-
-
-SUMMARY_PATTERNS = (
-    "summary.json",
-    "eval_summary.json",
-    "train_summary.json",
-    "training_summary.json",
-    "qlora_summary.json",
-    "router_summary.json",
-    "router_inspect_summary.json",
 )
 
 
+@dataclass
+class ResultRecord:
+    """Normalized row for paper-facing result tables."""
+
+    run_dir: str = ""
+    stage: str = ""
+    model_name: str = ""
+    method: str = ""
+    success: bool = False
+    failure: bool = False
+    ppl: float | None = None
+    train_loss: float | None = None
+    tokens_per_sec: float | None = None
+    load_variance: float | None = None
+    dead_expert_ratio: float | None = None
+    expert_entropy: float | None = None
+    has_cpu_offload: bool = False
+    has_disk_offload: bool = False
+    error_message: str = ""
+
+
 def load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON object from a path."""
-    with path.open("r", encoding="utf-8") as f:
-        data = json.load(f)
+    """Load a JSON object from a summary file."""
+    with path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
     if not isinstance(data, dict):
         raise ValueError(f"Expected JSON object in {path}")
     return data
 
 
-def iter_summary_paths(outputs_dir: Path) -> list[Path]:
-    """Return known summary files from outputs/run_* directories."""
-    paths: list[Path] = []
-    seen: set[Path] = set()
-    for run_dir in sorted(outputs_dir.glob("run_*")):
-        if not run_dir.is_dir():
-            continue
-        for pattern in SUMMARY_PATTERNS:
-            for path in sorted(run_dir.glob(pattern)):
-                resolved = path.resolve()
-                if resolved not in seen:
-                    seen.add(resolved)
-                    paths.append(path)
-        for path in sorted(run_dir.glob("*summary*.json")):
-            resolved = path.resolve()
-            if resolved not in seen:
-                seen.add(resolved)
-                paths.append(path)
-    return paths
+def discover_summary_files(outputs_dir: Path) -> list[Path]:
+    """Find summary files following the repository result conventions."""
+    candidates: set[Path] = set()
+    candidates.update(outputs_dir.glob("run_*/summary.json"))
+    candidates.update(outputs_dir.glob("run_*/eval_summary.json"))
+    candidates.update(outputs_dir.glob("**/train_summary.json"))
+    return sorted(candidates)
 
 
-def first_value(data: dict[str, Any], keys: tuple[str, ...], default: Any = "") -> Any:
-    """Return the first present, non-None value from a dictionary."""
+def _first_value(data: dict[str, Any], keys: Iterable[str], default: Any = None) -> Any:
+    """Return the first present non-empty value from a list of possible keys."""
     for key in keys:
-        if key in data and data[key] is not None:
-            return data[key]
+        value = data.get(key)
+        if value is not None and value != "":
+            return value
     return default
 
 
+def _as_float(value: Any) -> float | None:
+    """Convert a JSON value to float when possible."""
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_bool(value: Any) -> bool:
+    """Convert common JSON scalar values to boolean."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    return bool(value)
+
+
 def infer_stage(path: Path, data: dict[str, Any]) -> str:
-    """Infer experiment stage from summary keys and file names."""
-    explicit = first_value(data, ("stage", "experiment_stage"), "")
+    """Infer experiment stage from explicit metadata or run directory names."""
+    explicit = _first_value(data, ("stage", "experiment_stage"))
     if explicit:
         return str(explicit)
-
-    name = path.name.lower()
-    text = " ".join(str(key).lower() for key in data.keys())
-    if "router" in name or "router" in text:
-        return "stage4_router_inspect"
-    if "train" in name or "qlora" in name or "train_" in text:
-        return "stage3_qlora"
-    if "eval" in name or "perplexity" in text or "ppl" in text:
+    run_name = path.parent.name.lower()
+    if "stage1" in run_name or "generate" in run_name:
+        return "stage1_generate"
+    if "stage2" in run_name or "wikitext" in run_name or path.name == "eval_summary.json":
         return "stage2_eval"
-    if "generation_success" in data or "generated_text" in data:
-        return "stage1_generation"
+    if "stage3" in run_name or "qlora" in run_name or "lora" in run_name:
+        return "stage3_train"
+    if "stage4" in run_name or "router" in run_name:
+        return "stage4_router_inspect"
+    if "stage5" in run_name or "mini_moe" in run_name:
+        return "stage5_mini_moe"
     return "unknown"
 
 
-def infer_status(data: dict[str, Any]) -> str:
-    """Infer a compact success/failure status from known summary booleans."""
-    for key in ("success", "generation_success", "eval_success", "train_success", "inspect_success"):
-        value = data.get(key)
-        if value is True:
-            return "success"
-        if value is False:
-            return "failed"
-    if data.get("error_type") or data.get("error_message"):
-        return "failed"
-    return "unknown"
+def normalize_record(path: Path, outputs_dir: Path) -> ResultRecord:
+    """Normalize one summary JSON file into a stable result row."""
+    data = load_json(path)
+    metrics = data.get("metrics", {})
+    if not isinstance(metrics, dict):
+        metrics = {}
+    merged = {**data, **metrics}
 
+    error_message = str(_first_value(merged, ("error_message", "error", "exception"), ""))
+    success = _as_bool(_first_value(merged, ("success", "ok", "completed"), not error_message))
+    failure = _as_bool(_first_value(merged, ("failure", "failed"), bool(error_message) or not success))
 
-def run_timestamp(run_dir: Path) -> str:
-    """Extract run timestamp from run_YYYYMMDD_HHMMSS style directory names."""
-    match = re.match(r"run_(\d{8}_\d{6}(?:_\d+)?)", run_dir.name)
-    if match:
-        return match.group(1)
-    return ""
-
-
-def max_peak_gpu_memory(data: dict[str, Any]) -> str:
-    """Return the largest recorded peak GPU memory value in GB, if available."""
-    candidates: list[float] = []
-    for key, value in data.items():
-        if not key.startswith("gpu_info"):
-            continue
-        if isinstance(value, list):
-            for item in value:
-                if not isinstance(item, dict):
-                    continue
-                peak = first_value(
-                    item,
-                    (
-                        "peak_allocated_memory_gb",
-                        "peak_memory_gb",
-                        "max_memory_allocated_gb",
-                        "allocated_memory_gb",
-                    ),
-                    None,
-                )
-                if isinstance(peak, (int, float)):
-                    candidates.append(float(peak))
-    if not candidates:
-        value = first_value(data, ("peak_gpu_memory_gb", "max_gpu_memory_gb"), None)
-        if isinstance(value, (int, float)):
-            candidates.append(float(value))
-    return f"{max(candidates):.3f}" if candidates else ""
-
-
-def normalize_record(path: Path, data: dict[str, Any], outputs_dir: Path) -> dict[str, Any]:
-    """Convert one summary JSON into a flat CSV/Markdown row."""
-    run_dir = path.parent
+    relative_run_dir = path.parent
     try:
-        run_dir_text = str(run_dir.relative_to(outputs_dir.parent))
+        relative_run_dir = path.parent.relative_to(outputs_dir)
     except ValueError:
-        run_dir_text = str(run_dir)
+        pass
 
-    dataset = first_value(data, ("dataset", "dataset_name"), "")
-    dataset_config = first_value(data, ("dataset_config", "dataset_config_name", "config_name"), "")
-    if dataset and dataset_config:
-        dataset = f"{dataset}/{dataset_config}"
-
-    record = {
-        "run_dir": run_dir_text,
-        "summary_file": path.name,
-        "stage": infer_stage(path, data),
-        "timestamp": first_value(data, ("timestamp", "created_at", "run_timestamp"), run_timestamp(run_dir)),
-        "model_name": first_value(data, ("model_name", "base_model", "model"), ""),
-        "dtype": first_value(data, ("dtype", "torch_dtype"), ""),
-        "dataset": dataset,
-        "split": first_value(data, ("split", "eval_split", "test_split"), ""),
-        "status": infer_status(data),
-        "load_success": first_value(data, ("load_success",), ""),
-        "generation_success": first_value(data, ("generation_success",), ""),
-        "eval_success": first_value(data, ("eval_success", "evaluation_success"), ""),
-        "train_success": first_value(data, ("train_success", "training_success"), ""),
-        "inspect_success": first_value(data, ("inspect_success", "router_inspect_success"), ""),
-        "perplexity": first_value(data, ("perplexity", "ppl", "eval_perplexity"), ""),
-        "eval_loss": first_value(data, ("eval_loss", "validation_loss"), ""),
-        "train_loss": first_value(data, ("train_loss", "final_train_loss"), ""),
-        "loss": first_value(data, ("loss", "final_loss"), ""),
-        "new_tokens": first_value(data, ("new_tokens",), ""),
-        "tokens_per_sec": first_value(data, ("tokens_per_sec", "generation_tokens_per_sec"), ""),
-        "has_cpu_offload": first_value(data, ("has_cpu_offload",), ""),
-        "has_disk_offload": first_value(data, ("has_disk_offload",), ""),
-        "peak_gpu_memory_gb": max_peak_gpu_memory(data),
-        "error_type": first_value(data, ("error_type",), ""),
-        "error_message": first_value(data, ("error_message",), ""),
-        "summary_path": str(path),
-    }
-    return {field: record.get(field, "") for field in RESULT_FIELDS}
+    return ResultRecord(
+        run_dir=str(relative_run_dir).replace("\\", "/"),
+        stage=infer_stage(path, merged),
+        model_name=str(_first_value(merged, ("model_name", "model", "base_model"), "")),
+        method=str(_first_value(merged, ("method", "router_method", "routing_method", "experiment"), "")),
+        success=success,
+        failure=failure,
+        ppl=_as_float(_first_value(merged, ("ppl", "perplexity", "eval_ppl"))),
+        train_loss=_as_float(_first_value(merged, ("train_loss", "loss", "final_train_loss"))),
+        tokens_per_sec=_as_float(_first_value(merged, ("tokens_per_sec", "tokens_per_second", "throughput"))),
+        load_variance=_as_float(_first_value(merged, ("load_variance", "expert_load_variance"))),
+        dead_expert_ratio=_as_float(_first_value(merged, ("dead_expert_ratio", "dead_experts_ratio"))),
+        expert_entropy=_as_float(_first_value(merged, ("expert_entropy", "routing_entropy"))),
+        has_cpu_offload=_as_bool(_first_value(merged, ("has_cpu_offload", "cpu_offload", "use_cpu_offload"), False)),
+        has_disk_offload=_as_bool(_first_value(merged, ("has_disk_offload", "disk_offload", "use_disk_offload"), False)),
+        error_message=error_message,
+    )
 
 
-def collect_result_records(outputs_dir: Path) -> list[dict[str, Any]]:
-    """Collect all recognized result summaries under an outputs directory."""
-    records: list[dict[str, Any]] = []
-    for path in iter_summary_paths(outputs_dir):
+def collect_result_records(outputs_dir: Path) -> list[ResultRecord]:
+    """Collect all known result summaries below an outputs directory."""
+    if not outputs_dir.exists():
+        return []
+    records: list[ResultRecord] = []
+    for path in discover_summary_files(outputs_dir):
         try:
-            data = load_json(path)
-            records.append(normalize_record(path, data, outputs_dir))
-        except Exception as exc:
+            records.append(normalize_record(path, outputs_dir))
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
             records.append(
-                {
-                    **{field: "" for field in RESULT_FIELDS},
-                    "run_dir": str(path.parent),
-                    "summary_file": path.name,
-                    "stage": "unreadable",
-                    "status": "failed",
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "summary_path": str(path),
-                }
+                ResultRecord(
+                    run_dir=str(path.parent).replace("\\", "/"),
+                    stage="collection_error",
+                    success=False,
+                    failure=True,
+                    error_message=f"{path.name}: {exc}",
+                )
             )
     return records
 
 
-def write_csv(records: list[dict[str, Any]], path: Path) -> None:
-    """Write result records to CSV."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=RESULT_FIELDS)
+def record_to_row(record: ResultRecord) -> dict[str, Any]:
+    """Convert a result dataclass into a CSV-safe mapping."""
+    return {field.name: getattr(record, field.name) for field in fields(ResultRecord)}
+
+
+def write_results_table(records: list[ResultRecord], csv_path: Path) -> None:
+    """Write normalized records as a CSV table."""
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=RESULT_FIELDS)
         writer.writeheader()
-        writer.writerows(records)
-
-
-def markdown_escape(value: Any) -> str:
-    """Escape Markdown table separators in scalar values."""
-    text = "" if value is None else str(value)
-    return text.replace("|", "\\|").replace("\n", " ")
-
-
-def write_markdown_summary(records: list[dict[str, Any]], path: Path) -> None:
-    """Write a compact Markdown summary table."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    columns = [
-        "run_dir",
-        "stage",
-        "status",
-        "model_name",
-        "dataset",
-        "split",
-        "perplexity",
-        "eval_loss",
-        "train_loss",
-        "tokens_per_sec",
-        "has_cpu_offload",
-        "has_disk_offload",
-        "peak_gpu_memory_gb",
-    ]
-    lines = [
-        "# Results Summary",
-        "",
-        f"Collected runs: {len(records)}",
-        "",
-    ]
-    if records:
-        lines.append("| " + " | ".join(columns) + " |")
-        lines.append("| " + " | ".join("---" for _ in columns) + " |")
         for record in records:
-            lines.append("| " + " | ".join(markdown_escape(record.get(col, "")) for col in columns) + " |")
-    else:
-        lines.append("No summary files found under `outputs/run_*`.")
-    lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+            writer.writerow(record_to_row(record))
+
+
+def _format_metric(value: float | None) -> str:
+    """Format optional float values for markdown tables."""
+    if value is None:
+        return ""
+    return f"{value:.6g}"
+
+
+def write_results_markdown(records: list[ResultRecord], md_path: Path) -> None:
+    """Write a compact markdown summary for quick paper-metric review."""
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    total = len(records)
+    failures = sum(1 for record in records if record.failure)
+    successes = sum(1 for record in records if record.success)
+
+    lines = [
+        "# p-MoE Results Summary",
+        "",
+        f"- Total records: {total}",
+        f"- Successful records: {successes}",
+        f"- Failed records: {failures}",
+        "",
+        "| run_dir | stage | method | ppl | train_loss | load_variance | dead_expert_ratio | expert_entropy | status |",
+        "|---|---|---|---:|---:|---:|---:|---:|---|",
+    ]
+    for record in records:
+        status = "success" if record.success and not record.failure else "failure"
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    record.run_dir,
+                    record.stage,
+                    record.method,
+                    _format_metric(record.ppl),
+                    _format_metric(record.train_loss),
+                    _format_metric(record.load_variance),
+                    _format_metric(record.dead_expert_ratio),
+                    _format_metric(record.expert_entropy),
+                    status,
+                ]
+            )
+            + " |"
+        )
+
+    failed = [record for record in records if record.failure and record.error_message]
+    if failed:
+        lines.extend(["", "## Errors", ""])
+        for record in failed:
+            lines.append(f"- `{record.run_dir}`: {record.error_message}")
+
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

@@ -1,0 +1,52 @@
+# Stage 5 controllable MiniGPT/Mini-MoE experiment config.
+seed: 42
+output_dir: outputs/mini_moe_pbit_load_competition
+device: cuda
+
+dataset_name: wikitext
+dataset_config_name: wikitext-2-raw-v1
+train_split: train
+eval_split: validation
+tokenizer_name: gpt2
+max_train_chars:
+max_eval_chars:
+
+batch_size: 4
+eval_batch_size: 4
+max_steps: 1000
+eval_steps: 100
+save_steps: 500
+eval_max_batches: 50
+learning_rate: 0.0003
+weight_decay: 0.1
+grad_clip: 1.0
+
+model:
+  vocab_size: 50257
+  block_size: 256
+  num_layers: 4
+  num_heads: 4
+  hidden_size: 256
+  intermediate_size: 1024
+  dropout: 0.1
+
+  # Routing methods:
+  # dense, topk, noisy_topk, gumbel, topk_st,
+  # pbit, pbit_load, pbit_competition, pbit_load_competition
+  routing_method: pbit_load_competition
+  num_experts: 8
+  top_k: 2
+  noisy_std: 1.0
+  temperature: 1.0
+  min_temperature: 0.2
+  alpha: 0.1
+  beta: 0.1
+  load_ema_decay: 0.99
+  dead_expert_threshold: 0.01
+
+  # Warmup modes:
+  # none, soft, wider_top_k, hard_forward_pbit_backward
+  # hard_forward_pbit_backward is represented by p-bit routing with straight-through masks.
+  warmup_steps: 500
+  warmup_mode: wider_top_k
+  warmup_top_k: 4

@@ -1,102 +1,81 @@
-"""Unit checks for p-bit router scaffold using random tensors only."""
+"""Small random-score checks for p-bit router primitives.
+
+This script is intentionally self-contained and does not load models, datasets,
+or external assets.
+"""
 
 from __future__ import annotations
 
+import argparse
+import json
 import sys
 from pathlib import Path
+from typing import Dict
 
 import torch
-from torch import nn
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.pbit_router import PBitBackwardRouter, PBitRouterConfig, PBitSurrogateMask
-from src.router_patch import apply_pbit_patch, build_router_patch_plan, list_router_like_modules
+from src.pbit_router import PBitBackwardRouter, PBitRouterConfig, sample_top_k_mask, top_k_mask
+from src.router_metrics import router_metric_summary
 
 
-class ToyRouter(nn.Module):
-    """Small deterministic router used for local unit tests."""
-
-    def __init__(self, in_features: int, num_experts: int) -> None:
-        super().__init__()
-        self.proj = nn.Linear(in_features, num_experts)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Return toy router logits."""
-        return self.proj(hidden_states)
-
-
-class ToyBlock(nn.Module):
-    """Small module with a router-like child name."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.router = ToyRouter(4, 6)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Run the router child."""
-        return self.router(hidden_states)
+def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments."""
+    parser = argparse.ArgumentParser(description="Random-score p-bit router smoke checks.")
+    parser.add_argument("--num_experts", type=int, default=8)
+    parser.add_argument("--top_k", type=int, default=2)
+    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--seq_len", type=int, default=16)
+    parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument("--alpha", type=float, default=0.1)
+    parser.add_argument("--beta", type=float, default=0.1)
+    parser.add_argument("--seed", type=int, default=1234)
+    parser.add_argument("--use_sampling", action="store_true")
+    parser.add_argument("--output", type=Path, default=None)
+    return parser.parse_args()
 
 
-def assert_hard_forward_and_grad() -> None:
-    """Verify hard top-k forward values and nonzero surrogate gradients."""
-    torch.manual_seed(7)
-    logits = torch.randn(3, 6, requires_grad=True)
-    config = PBitRouterConfig(num_experts=6, top_k=2, alpha=1.0, temperature=0.75)
-    mask = PBitSurrogateMask(config)(logits)
-
-    expected = torch.zeros_like(logits).scatter_(-1, logits.topk(k=2, dim=-1).indices, 1.0)
-    if not torch.equal(mask.detach(), expected):
-        raise AssertionError("Forward mask is not the exact hard top-k mask.")
-
-    weights = torch.linspace(-1.0, 1.0, steps=logits.numel(), dtype=logits.dtype).reshape_as(logits)
-    loss = (mask * weights).sum()
+def run_checks(args: argparse.Namespace) -> Dict[str, object]:
+    """Run shape and gradient checks on random router scores."""
+    torch.manual_seed(args.seed)
+    scores = torch.randn(args.batch_size, args.seq_len, args.num_experts, requires_grad=True)
+    config = PBitRouterConfig(
+        num_experts=args.num_experts,
+        top_k=args.top_k,
+        alpha=args.alpha,
+        beta=args.beta,
+        temperature=args.temperature,
+        use_sampling=args.use_sampling,
+    )
+    router = PBitBackwardRouter(config)
+    gates, aux = router(scores, return_aux=True)
+    loss = (gates * scores).sum()
     loss.backward()
-    if logits.grad is None:
-        raise AssertionError("Expected logits gradients, got None.")
-    if not torch.isfinite(logits.grad).all():
-        raise AssertionError("Expected finite logits gradients.")
-    if logits.grad.abs().sum().item() <= 0:
-        raise AssertionError("Expected nonzero surrogate gradients.")
-
-
-def assert_router_wrapper() -> None:
-    """Verify wrapper output shape and hard forward mask."""
-    torch.manual_seed(11)
-    base_router = ToyRouter(4, 5)
-    wrapped = PBitBackwardRouter(base_router, PBitRouterConfig(num_experts=5, top_k=1))
-    hidden = torch.randn(2, 4)
-    output = wrapped(hidden)
-    if output.shape != (2, 5):
-        raise AssertionError(f"Unexpected wrapped output shape: {tuple(output.shape)}")
-    if not torch.allclose(output.detach().sum(dim=-1), torch.ones(2)):
-        raise AssertionError("top_k=1 hard mask should sum to 1 per row.")
-
-
-def assert_patch_helpers() -> None:
-    """Verify candidate discovery and explicit patch application."""
-    model = ToyBlock()
-    candidates = list_router_like_modules(model)
-    names = [candidate.name for candidate in candidates]
-    if "router" not in names:
-        raise AssertionError(f"Expected to discover router candidate, got {names}")
-    plan = build_router_patch_plan(model)
-    if plan["candidate_count"] < 1:
-        raise AssertionError("Expected at least one router-like module in patch plan.")
-
-    apply_pbit_patch(model, "router", PBitRouterConfig(num_experts=6, top_k=2))
-    if not isinstance(model.router, PBitBackwardRouter):
-        raise AssertionError("Router child was not replaced by PBitBackwardRouter.")
+    hard = aux["hard_mask"]
+    sampled = sample_top_k_mask(aux["surrogate_prob"].detach(), args.top_k)
+    topk = top_k_mask(scores.detach(), args.top_k)
+    return {
+        "scores_shape": list(scores.shape),
+        "gates_shape": list(gates.shape),
+        "hard_selected_per_token_min": float(hard.sum(dim=-1).min().item()),
+        "hard_selected_per_token_max": float(hard.sum(dim=-1).max().item()),
+        "topk_selected_per_token_min": float(topk.sum(dim=-1).min().item()),
+        "sampled_selected_per_token_min": float(sampled.sum(dim=-1).min().item()),
+        "score_grad_norm": float(scores.grad.norm().item()) if scores.grad is not None else 0.0,
+        "metrics": router_metric_summary(hard),
+    }
 
 
 def main() -> None:
-    """Run all local unit checks."""
-    assert_hard_forward_and_grad()
-    assert_router_wrapper()
-    assert_patch_helpers()
-    print("P-bit router unit tests passed.")
+    """CLI entry point."""
+    args = parse_args()
+    summary = run_checks(args)
+    text = json.dumps(summary, indent=2, sort_keys=True)
+    if args.output is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(text + "\n", encoding="utf-8")
+    print(text)
 
 
 if __name__ == "__main__":

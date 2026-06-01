@@ -1,0 +1,25 @@
+outputs_dir: outputs
+csv_path: outputs/results_table.csv
+md_path: outputs/results_summary.md
+
+input_patterns:
+  - outputs/run_*/summary.json
+  - outputs/run_*/eval_summary.json
+  - outputs/**/train_summary.json
+
+fields:
+  - run_dir
+  - stage
+  - model_name
+  - method
+  - success
+  - failure
+  - ppl
+  - train_loss
+  - tokens_per_sec
+  - load_variance
+  - dead_expert_ratio
+  - expert_entropy
+  - has_cpu_offload
+  - has_disk_offload
+  - error_message

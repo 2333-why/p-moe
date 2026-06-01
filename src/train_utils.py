@@ -1,316 +1,259 @@
-"""Shared Stage 3 Trainer utilities for LoRA and QLoRA runs."""
+"""Shared utilities for continued-pretraining scripts.
+
+The helpers in this module are intentionally safe at import time: they do not
+load models, datasets, initialize WandB, or allocate CUDA tensors.
+"""
 
 from __future__ import annotations
 
-import inspect
+import argparse
+import json
+import math
 import os
-import shutil
+import random
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Iterable, Mapping, Optional
 
-import torch
 import yaml
-from datasets import DownloadConfig, load_dataset
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    DataCollatorForLanguageModeling,
-    Trainer,
-    TrainingArguments,
-)
-
-from src.logging_utils import create_run_dir, save_json, save_text
-from src.lora_utils import resolve_torch_dtype
 
 
-def load_yaml_config(path: str) -> dict[str, Any]:
-    """
-    Load a YAML config file.
-    """
+def str_to_bool(value: Any) -> bool:
+    """Parse common CLI/config boolean spellings."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Expected a boolean value, got {value!r}.")
+
+
+def read_yaml_config(path: Optional[str]) -> Dict[str, Any]:
+    """Read a YAML config file, returning an empty dict when no path is given."""
+    if not path:
+        return {}
     with Path(path).open("r", encoding="utf-8") as handle:
-        return yaml.safe_load(handle) or {}
+        data = yaml.safe_load(handle) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Config file must contain a mapping: {path}")
+    return data
 
 
-def save_yaml_config(config: dict[str, Any], path: str) -> None:
-    """
-    Save a YAML config file.
-    """
-    save_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), path)
+def write_yaml_config(path: str | Path, data: Mapping[str, Any]) -> None:
+    """Write a YAML mapping with stable key order disabled for readability."""
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(dict(data), handle, sort_keys=False)
 
 
-def apply_cli_overrides(config: dict[str, Any], args: Any) -> dict[str, Any]:
-    """
-    Apply common Stage 3 command-line overrides to a config dictionary.
-    """
-    merged = dict(config)
-    for key in (
-        "model_name",
-        "dataset_name",
-        "dataset_config_name",
-        "train_split",
-        "eval_split",
-        "dtype",
-        "device_map",
-        "output_dir",
-        "block_size",
-    ):
-        value = getattr(args, key, None)
+def write_json(path: str | Path, data: Mapping[str, Any]) -> None:
+    """Write a JSON file without leaking environment secret values."""
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        json.dump(dict(data), handle, indent=2, sort_keys=True)
+        handle.write("\n")
+
+
+def merge_config(cli_values: argparse.Namespace, file_values: Mapping[str, Any]) -> Dict[str, Any]:
+    """Merge YAML and CLI values, with explicit CLI values taking precedence."""
+    merged = dict(file_values)
+    for key, value in vars(cli_values).items():
+        if key == "config":
+            continue
         if value is not None:
             merged[key] = value
-    if getattr(args, "local_files_only", False):
-        merged["local_files_only"] = True
-    if getattr(args, "max_seq_length", None) is not None:
-        merged["block_size"] = int(args.max_seq_length)
-    if getattr(args, "max_steps", None) is not None:
-        merged.setdefault("training", {})["max_steps"] = int(args.max_steps)
-    if getattr(args, "num_train_epochs", None) is not None:
-        merged.setdefault("training", {})["num_train_epochs"] = float(args.num_train_epochs)
-    if getattr(args, "gradient_accumulation_steps", None) is not None:
-        merged.setdefault("training", {})["gradient_accumulation_steps"] = int(
-            args.gradient_accumulation_steps
-        )
-    if getattr(args, "save_steps", None) is not None:
-        merged.setdefault("training", {})["save_steps"] = int(args.save_steps)
-    if getattr(args, "learning_rate", None) is not None:
-        merged.setdefault("training", {})["learning_rate"] = float(args.learning_rate)
     return merged
 
 
-def secret_safe_env_summary() -> dict[str, Any]:
-    """
-    Return environment metadata without exposing raw secret values.
-    """
+def require_package(import_name: str, install_hint: str):
+    """Import an optional dependency or raise a clear installation error."""
+    try:
+        return __import__(import_name)
+    except ImportError as exc:
+        raise ImportError(
+            f"Missing optional dependency '{import_name}'. Install it with: {install_hint}"
+        ) from exc
+
+
+def seed_everything(seed: int) -> None:
+    """Seed Python, NumPy, and PyTorch when available."""
+    random.seed(seed)
+    try:
+        import numpy as np
+
+        np.random.seed(seed)
+    except ImportError:
+        pass
+    try:
+        import torch
+
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+    except ImportError:
+        pass
+
+
+def sanitize_env_flags() -> Dict[str, bool]:
+    """Return secret-safe environment status flags."""
     return {
-        "hf_endpoint": os.environ.get("HF_ENDPOINT", "not set"),
-        "hf_home": os.environ.get("HF_HOME", "not set"),
-        "hf_hub_cache": os.environ.get("HF_HUB_CACHE", "not set"),
-        "hf_datasets_cache": os.environ.get("HF_DATASETS_CACHE", "not set"),
-        "hf_token_is_set": bool(os.environ.get("HF_TOKEN")),
-        "wandb_api_key_is_set": bool(os.environ.get("WANDB_API_KEY")),
+        "hf_token_set": bool(os.environ.get("HF_TOKEN")),
+        "wandb_api_key_set": bool(os.environ.get("WANDB_API_KEY")),
+        "hf_endpoint_set": bool(os.environ.get("HF_ENDPOINT")),
+        "hf_home_set": bool(os.environ.get("HF_HOME")),
+        "hf_hub_cache_set": bool(os.environ.get("HF_HUB_CACHE")),
+        "hf_datasets_cache_set": bool(os.environ.get("HF_DATASETS_CACHE")),
     }
 
 
-def create_training_run_dir(output_dir: str) -> Path:
-    """
-    Create a timestamped training run directory under the configured output directory.
-    """
-    return Path(create_run_dir(output_dir))
+def resolve_torch_dtype(dtype_name: str):
+    """Resolve a torch dtype name lazily."""
+    import torch
+
+    normalized = str(dtype_name).lower()
+    if normalized in {"auto", "none"}:
+        return "auto"
+    if normalized == "bf16":
+        return torch.bfloat16
+    if normalized == "fp16":
+        return torch.float16
+    if normalized == "fp32":
+        return torch.float32
+    raise ValueError(f"Unsupported dtype '{dtype_name}'. Use auto, bf16, fp16, or fp32.")
 
 
-def load_tokenizer_for_training(config: dict[str, Any]):
-    """
-    Load a tokenizer and ensure a pad token is available for batching.
-    """
-    tokenizer = AutoTokenizer.from_pretrained(
-        config["model_name"],
-        trust_remote_code=bool(config.get("trust_remote_code", True)),
-        local_files_only=bool(config.get("local_files_only", False)),
-        use_fast=True,
+def build_training_arguments(config: Mapping[str, Any]):
+    """Create Hugging Face TrainingArguments from a normalized config."""
+    from transformers import TrainingArguments
+
+    report_to = ["wandb"] if config.get("use_wandb", False) else []
+    return TrainingArguments(
+        output_dir=str(config["output_dir"]),
+        overwrite_output_dir=bool(config.get("overwrite_output_dir", False)),
+        max_steps=int(config.get("max_steps", -1)),
+        num_train_epochs=float(config.get("num_train_epochs", 1.0)),
+        per_device_train_batch_size=int(config.get("per_device_train_batch_size", 1)),
+        gradient_accumulation_steps=int(config.get("gradient_accumulation_steps", 1)),
+        learning_rate=float(config.get("learning_rate", 2e-4)),
+        weight_decay=float(config.get("weight_decay", 0.0)),
+        warmup_steps=int(config.get("warmup_steps", 0)),
+        logging_steps=int(config.get("logging_steps", 10)),
+        save_steps=int(config.get("save_steps", 500)),
+        save_total_limit=int(config.get("save_total_limit", 2)),
+        bf16=bool(config.get("bf16", False)),
+        fp16=bool(config.get("fp16", False)),
+        gradient_checkpointing=bool(config.get("gradient_checkpointing", False)),
+        optim=str(config.get("optim", "adamw_torch")),
+        lr_scheduler_type=str(config.get("lr_scheduler_type", "cosine")),
+        report_to=report_to,
+        run_name=config.get("run_name"),
+        dataloader_num_workers=int(config.get("dataloader_num_workers", 0)),
+        remove_unused_columns=False,
     )
-    if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
-        tokenizer.pad_token = tokenizer.eos_token
-    return tokenizer
 
 
-def load_causal_lm_for_training(
-    config: dict[str, Any],
-    quantization_config: Any | None = None,
-):
-    """
-    Load a causal LM for Stage 3 training when the user explicitly runs a train script.
-    """
-    kwargs: dict[str, Any] = {
-        "torch_dtype": resolve_torch_dtype(config.get("dtype", "bf16")),
-        "device_map": config.get("device_map", "auto"),
-        "trust_remote_code": bool(config.get("trust_remote_code", True)),
-        "low_cpu_mem_usage": bool(config.get("low_cpu_mem_usage", True)),
-        "local_files_only": bool(config.get("local_files_only", False)),
-    }
-    if quantization_config is not None:
-        kwargs["quantization_config"] = quantization_config
-    return AutoModelForCausalLM.from_pretrained(config["model_name"], **kwargs)
+def load_text_dataset(config: Mapping[str, Any]):
+    """Load a Hugging Face text dataset lazily from script entrypoints."""
+    datasets = require_package("datasets", "pip install datasets")
+    dataset_name = config.get("dataset_name")
+    if not dataset_name:
+        raise ValueError("dataset_name is required for continued pretraining.")
+    return datasets.load_dataset(
+        str(dataset_name),
+        config.get("dataset_config_name"),
+        split=str(config.get("dataset_split", "train")),
+        data_files=config.get("data_files"),
+        streaming=bool(config.get("streaming", False)),
+    )
 
 
-def load_and_tokenize_lm_dataset(config: dict[str, Any], tokenizer):
-    """
-    Load WikiText-style text data and tokenize it into fixed-length causal LM blocks.
-    """
-    dataset_kwargs = {
-        "path": config["dataset_name"],
-        "name": config.get("dataset_config_name"),
-    }
-    dataset_kwargs = {key: value for key, value in dataset_kwargs.items() if value}
-    if bool(config.get("local_files_only", False)):
-        dataset_kwargs["download_config"] = DownloadConfig(local_files_only=True)
-    raw = load_dataset(**dataset_kwargs)
-    train_split = str(config.get("train_split", "train"))
-    eval_split = str(config.get("eval_split", "validation"))
-    if train_split not in raw:
-        raise ValueError(f"Train split '{train_split}' not found in dataset. Available: {list(raw)}")
-    if eval_split not in raw:
-        raise ValueError(f"Eval split '{eval_split}' not found in dataset. Available: {list(raw)}")
+def tokenize_and_group_texts(dataset, tokenizer, config: Mapping[str, Any]):
+    """Tokenize text rows and group tokens into fixed-length LM blocks."""
+    text_column = str(config.get("text_column", "text"))
+    block_size = int(config.get("block_size", 1024))
+    preprocessing_num_workers = config.get("preprocessing_num_workers")
 
-    text_column = "text" if "text" in raw[train_split].column_names else raw[train_split].column_names[0]
-    block_size = int(config.get("block_size", config.get("max_seq_length", 1024)))
-    workers = int(config.get("preprocessing_num_workers", 1))
+    if block_size <= 0:
+        raise ValueError("block_size must be positive.")
 
-    def tokenize_batch(batch: dict[str, list[str]]) -> dict[str, Any]:
-        texts = [text for text in batch[text_column] if text and not text.isspace()]
-        return tokenizer(texts, add_special_tokens=True)
+    def tokenize_function(examples):
+        texts = [text for text in examples[text_column] if text is not None and str(text).strip()]
+        return tokenizer(texts)
 
-    tokenized = raw.map(
-        tokenize_batch,
+    tokenized = dataset.map(
+        tokenize_function,
         batched=True,
-        remove_columns=raw[train_split].column_names,
-        num_proc=workers,
-        desc="Tokenizing text",
+        remove_columns=list(dataset.column_names),
+        num_proc=preprocessing_num_workers,
+        desc="Tokenizing dataset",
     )
 
-    def group_texts(examples: dict[str, list[list[int]]]) -> dict[str, Any]:
-        concatenated = {key: sum(examples[key], []) for key in examples}
+    def group_texts(examples):
+        concatenated = {key: sum(examples[key], []) for key in examples.keys()}
         total_length = len(concatenated["input_ids"])
-        if total_length >= block_size:
-            total_length = (total_length // block_size) * block_size
+        total_length = (total_length // block_size) * block_size
         result = {
-            key: [
-                values[index : index + block_size]
-                for index in range(0, total_length, block_size)
-            ]
-            for key, values in concatenated.items()
+            key: [tokens[i : i + block_size] for i in range(0, total_length, block_size)]
+            for key, tokens in concatenated.items()
         }
-        result["labels"] = list(result["input_ids"])
+        result["labels"] = result["input_ids"].copy()
         return result
 
-    lm_dataset = tokenized.map(
+    return tokenized.map(
         group_texts,
         batched=True,
-        num_proc=workers,
-        desc=f"Grouping into {block_size}-token blocks",
+        num_proc=preprocessing_num_workers,
+        desc=f"Grouping texts into {block_size}-token blocks",
     )
-    return lm_dataset[train_split], lm_dataset[eval_split]
 
 
-def build_training_arguments(config: dict[str, Any], run_dir: Path, use_wandb: bool) -> TrainingArguments:
-    """
-    Build TrainingArguments while keeping WandB disabled unless explicitly requested.
-    """
-    training = dict(config.get("training", {}))
-    report_to = ["wandb"] if use_wandb else []
-    args: dict[str, Any] = {
-        "output_dir": str(run_dir),
-        "run_name": config.get("run_name", run_dir.name),
-        "overwrite_output_dir": False,
-        "num_train_epochs": training.get("num_train_epochs", 1),
-        "max_steps": training.get("max_steps", -1),
-        "per_device_train_batch_size": training.get("per_device_train_batch_size", 1),
-        "per_device_eval_batch_size": training.get("per_device_eval_batch_size", 1),
-        "gradient_accumulation_steps": training.get("gradient_accumulation_steps", 16),
-        "learning_rate": training.get("learning_rate", 1e-4),
-        "weight_decay": training.get("weight_decay", 0.0),
-        "warmup_ratio": training.get("warmup_ratio", 0.03),
-        "lr_scheduler_type": training.get("lr_scheduler_type", "cosine"),
-        "logging_steps": training.get("logging_steps", 5),
-        "eval_steps": training.get("eval_steps", 50),
-        "save_steps": training.get("save_steps", 50),
-        "save_total_limit": training.get("save_total_limit", 2),
-        "gradient_checkpointing": training.get("gradient_checkpointing", True),
-        "bf16": training.get("bf16", config.get("dtype") == "bf16"),
-        "fp16": training.get("fp16", config.get("dtype") == "fp16"),
-        "optim": training.get("optim", "adamw_torch"),
-        "report_to": report_to,
-        "remove_unused_columns": False,
-    }
-    signature = inspect.signature(TrainingArguments.__init__)
-    if "eval_strategy" in signature.parameters:
-        args["eval_strategy"] = "steps"
-    else:
-        args["evaluation_strategy"] = "steps"
-    return TrainingArguments(**args)
-
-
-def maybe_enable_wandb(use_wandb: bool) -> None:
-    """
-    Validate optional WandB availability without reading or printing raw keys.
-    """
-    if not use_wandb:
-        os.environ.setdefault("WANDB_DISABLED", "true")
+def maybe_init_wandb(config: Mapping[str, Any]) -> None:
+    """Initialize WandB only when explicitly requested."""
+    if not config.get("use_wandb", False):
         return
-    import importlib.util
-
-    if importlib.util.find_spec("wandb") is None:
-        raise RuntimeError("WandB requested with --use_wandb, but wandb is not installed.")
-    if not os.environ.get("WANDB_API_KEY"):
-        print("WANDB_API_KEY: not set. WandB may require prior login or environment setup.")
-
-
-def run_trainer(
-    model,
-    tokenizer,
-    train_dataset,
-    eval_dataset,
-    config: dict[str, Any],
-    run_dir: Path,
-    use_wandb: bool,
-) -> dict[str, Any]:
-    """
-    Run Hugging Face Trainer and save adapter/checkpoint artifacts.
-    """
-    training_args = build_training_arguments(config, run_dir, use_wandb)
-    collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        tokenizer=tokenizer,
-        data_collator=collator,
+    wandb = require_package("wandb", "pip install wandb")
+    wandb.init(
+        project=config.get("wandb_project", "p-moe"),
+        name=config.get("run_name"),
+        config={key: value for key, value in config.items() if "token" not in key.lower() and "key" not in key.lower()},
     )
-    train_output = trainer.train()
-    trainer.save_model(str(run_dir / "final_adapter"))
-    tokenizer.save_pretrained(str(run_dir / "final_adapter"))
-    metrics = dict(train_output.metrics)
-    trainer.save_metrics("train", metrics)
-    trainer.save_state()
-    state_path = run_dir / "trainer_state.json"
-    if state_path.exists():
-        shutil.copy2(state_path, run_dir / "trainer_state.final.json")
-    return metrics
 
 
-def save_train_summary(
-    run_dir: Path,
-    config: dict[str, Any],
-    success: bool,
-    metrics: dict[str, Any] | None = None,
-    error: BaseException | None = None,
-    extra: dict[str, Any] | None = None,
-) -> None:
-    """
-    Save a secret-safe train_summary.json file.
-    """
-    summary: dict[str, Any] = {
+def compute_train_summary(trainer, config: Mapping[str, Any], train_result: Any) -> Dict[str, Any]:
+    """Build a compact training summary suitable for result collection."""
+    metrics = dict(getattr(train_result, "metrics", {}) or {})
+    train_loss = metrics.get("train_loss")
+    perplexity = math.exp(train_loss) if isinstance(train_loss, (int, float)) and train_loss < 20 else None
+    return {
+        "stage": "stage3_lora_qlora",
+        "run_name": config.get("run_name"),
         "model_name": config.get("model_name"),
         "dataset_name": config.get("dataset_name"),
         "dataset_config_name": config.get("dataset_config_name"),
-        "success": success,
-        "metrics": metrics or {},
-        **secret_safe_env_summary(),
+        "dataset_split": config.get("dataset_split"),
+        "output_dir": config.get("output_dir"),
+        "local_files_only": bool(config.get("local_files_only", False)),
+        "use_wandb": bool(config.get("use_wandb", False)),
+        "bf16": bool(config.get("bf16", False)),
+        "gradient_checkpointing": bool(config.get("gradient_checkpointing", False)),
+        "max_steps": int(config.get("max_steps", -1)),
+        "num_train_epochs": float(config.get("num_train_epochs", 1.0)),
+        "train_loss": train_loss,
+        "train_ppl_estimate": perplexity,
+        "metrics": metrics,
+        "env": sanitize_env_flags(),
     }
-    if extra:
-        summary.update(extra)
-    if error is not None:
-        summary["error_type"] = type(error).__name__
-        summary["error_message"] = redact_known_secrets(str(error))
-    save_json(summary, str(run_dir / "train_summary.json"))
 
 
-def redact_known_secrets(text: str) -> str:
-    """
-    Redact known secret environment values from a loggable string.
-    """
-    redacted = text
-    for name in ("HF_TOKEN", "WANDB_API_KEY"):
-        value = os.environ.get(name)
-        if value and len(value) >= 4:
-            redacted = redacted.replace(value, f"<{name}:redacted>")
-    return redacted
+def save_training_artifacts(config: Mapping[str, Any], summary: Mapping[str, Any]) -> None:
+    """Save the normalized config and train summary under output_dir."""
+    output_dir = Path(str(config["output_dir"]))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    write_yaml_config(output_dir / "train_config_used.yaml", config)
+    write_json(output_dir / "train_summary.json", summary)

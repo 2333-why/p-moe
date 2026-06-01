@@ -7,9 +7,11 @@ protobuf
 datasets
 pyyaml
 tqdm
+numpy
+pandas
 
-# Optional future dependencies; do not require for Stage 1.
-# Optional Stage 3 dependencies; install explicitly before running train scripts.
-# bitsandbytes
+# Optional Stage 3 / logging / plotting dependencies:
 # peft
+# bitsandbytes
 # wandb
+# matplotlib

@@ -1,5 +1,29 @@
-model_name: "deepseek-ai/deepseek-moe-16b-base"
-revision: "main"
-mode: "local"
-local_dir: "models/deepseek-moe-16b-base"
-resume_download: true
+# Stage 1.5: explicit online asset download defaults.
+download:
+  mode: local
+  model_name: deepseek-ai/deepseek-moe-16b-base
+  local_dir: models/deepseek-moe-16b-base
+  revision: main
+  resume_download: true
+  local_dir_use_symlinks: false
+
+huggingface:
+  respect_env_cache: true
+  token_env_var: HF_TOKEN
+  allow_patterns:
+    - "*.json"
+    - "*.model"
+    - "*.txt"
+    - "*.safetensors"
+    - "*.py"
+  ignore_patterns:
+    - "*.msgpack"
+    - "*.h5"
+
+output:
+  output_dir: outputs/run_stage1_download
+  summary_name: summary.json
+
+safety:
+  print_env: false
+  print_secret_values: false

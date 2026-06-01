@@ -1,74 +1,50 @@
-model_name: "models/deepseek-moe-16b-base"
-dataset_name: "wikitext"
-dataset_config_name: "wikitext-2-raw-v1"
-train_split: "train"
-eval_split: "validation"
-
-dtype: "bf16"
-device_map: "auto"
-trust_remote_code: true
-low_cpu_mem_usage: true
+model_name: models/deepseek-moe-16b-base
+output_dir: outputs/stage3_qlora
 local_files_only: true
+trust_remote_code: true
 
-output_dir: "outputs/qlora"
-run_name: "deepseek_moe_qlora_stage3"
+dataset_name: wikitext
+dataset_config_name: wikitext-2-raw-v1
+dataset_split: train
+text_column: text
 block_size: 1024
-per_device_train_batch_size: 1
-gradient_accumulation_steps: 16
-learning_rate: 1.0e-5
-max_steps: 100
+preprocessing_num_workers: null
+
 bf16: true
+fp16: false
 gradient_checkpointing: true
-lora_rank: 8
-lora_alpha: 16
+
+max_steps: -1
+num_train_epochs: 1.0
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+learning_rate: 0.0002
+weight_decay: 0.0
+warmup_steps: 100
+lr_scheduler_type: cosine
+optim: paged_adamw_8bit
+logging_steps: 10
+save_steps: 500
+save_total_limit: 2
+dataloader_num_workers: 0
+overwrite_output_dir: false
+
+lora_r: 16
+lora_alpha: 32
 lora_dropout: 0.05
-save_steps: 50
-load_in_4bit: true
-bnb_4bit_quant_type: "nf4"
-bnb_4bit_compute_dtype: "bf16"
+lora_target_modules: null
+lora_bias: none
+task_type: CAUSAL_LM
+
+bnb_4bit_quant_type: nf4
 bnb_4bit_use_double_quant: true
-preprocessing_num_workers: 4
+bnb_4bit_compute_dtype: bf16
+device_map: auto
+prepare_model_for_kbit_training: true
 
-qlora:
-  load_in_4bit: true
-  bnb_4bit_quant_type: "nf4"
-  bnb_4bit_compute_dtype: "bf16"
-  bnb_4bit_use_double_quant: true
+use_wandb: false
+wandb_project: p-moe
+run_name: stage3_qlora
+seed: 42
 
-lora:
-  r: 8
-  alpha: 16
-  dropout: 0.05
-  bias: "none"
-  task_type: "CAUSAL_LM"
-  target_modules:
-    - "q_proj"
-    - "k_proj"
-    - "v_proj"
-    - "o_proj"
-
-training:
-  num_train_epochs: 1
-  max_steps: 100
-  per_device_train_batch_size: 1
-  per_device_eval_batch_size: 1
-  gradient_accumulation_steps: 16
-  learning_rate: 1.0e-5
-  weight_decay: 0.0
-  warmup_ratio: 0.03
-  lr_scheduler_type: "cosine"
-  logging_steps: 5
-  eval_steps: 50
-  save_steps: 50
-  save_total_limit: 2
-  gradient_checkpointing: true
-  bf16: true
-  fp16: false
-  optim: "paged_adamw_8bit"
-  report_to: []
-
-# TODO Stage 4:
-# Add router-specific LoRA target discovery after MoE router modules are inspected.
-#
-# TODO Stage 5:
-# Add p-bit router ablation config fields after the surrogate-router design is fixed.
+router_lora_todo: TODO add router-specific LoRA target selection and p-bit ablation hooks after router inspection.

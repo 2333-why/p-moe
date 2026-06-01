@@ -1,165 +1,90 @@
-"""Download Stage 1 model assets without running inference."""
+"""Download or cache model/tokenizer assets for offline Stage 1 runs.
+
+The script uses Hugging Face Hub APIs only when explicitly executed. It never
+prints raw tokens and respects HF_ENDPOINT/HF_HOME/HF_HUB_CACHE from the
+environment.
+"""
 
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
-from typing import Any
 
-import yaml
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from src.gpu_utils import disk_summary, hf_environment_summary
+from src.logging_utils import write_json
+from src.model_utils import huggingface_token_kwargs
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "download_config.yaml"
+def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser."""
 
-
-def parse_args() -> argparse.Namespace:
-    """Parse download-stage command-line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Download DeepSeek-MoE assets to Hugging Face cache or a local directory."
-    )
-    parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Path to download YAML config")
-    parser.add_argument("--model_name", default=None, help="Hugging Face model id")
-    parser.add_argument("--revision", default=None, help="Model revision, branch, tag, or commit SHA")
-    parser.add_argument("--local_dir", default=None, help="Local output directory for --mode local")
-    parser.add_argument("--mode", choices=["cache", "local"], default=None, help="Download mode")
+    parser = argparse.ArgumentParser(description="Download Hugging Face assets for p-MoE offline usage.")
+    parser.add_argument("--model_name", default="deepseek-ai/deepseek-moe-16b-base", help="HF repo id or model name.")
+    parser.add_argument("--local_dir", default="models/deepseek-moe-16b-base", help="Target local directory.")
+    parser.add_argument("--revision", default=None, help="Optional model revision.")
     parser.add_argument(
-        "--resume_download",
-        action="store_true",
-        default=None,
-        help="Resume partially downloaded files when supported by huggingface_hub",
+        "--mode",
+        choices=["cache", "local"],
+        default="local",
+        help="cache uses HF cache only; local also materializes files in --local_dir.",
     )
-    return parser.parse_args()
+    parser.add_argument("--resume_download", action="store_true", help="Resume an interrupted download when supported.")
+    parser.add_argument("--allow_patterns", nargs="*", default=None, help="Optional allow patterns for snapshot_download.")
+    parser.add_argument("--ignore_patterns", nargs="*", default=None, help="Optional ignore patterns for snapshot_download.")
+    parser.add_argument("--summary_path", default="outputs/download_summary.json", help="Summary JSON path.")
+    return parser
 
 
-def load_config(config_path: str) -> dict[str, Any]:
-    """Load YAML config from disk."""
-    path = Path(config_path)
-    if not path.exists():
-        return {}
-    with path.open("r", encoding="utf-8") as handle:
-        loaded = yaml.safe_load(handle) or {}
-    if not isinstance(loaded, dict):
-        raise ValueError(f"Download config must be a YAML mapping: {config_path}")
-    return loaded
+def main() -> None:
+    """Download model assets using snapshot_download."""
 
-
-def default_config() -> dict[str, Any]:
-    """Return default download settings."""
-    return {
-        "model_name": "deepseek-ai/deepseek-moe-16b-base",
-        "revision": "main",
-        "mode": "local",
-        "local_dir": "models/deepseek-moe-16b-base",
-        "resume_download": True,
-    }
-
-
-def apply_overrides(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
-    """Apply non-null CLI overrides to download config."""
-    merged = default_config()
-    merged.update(config)
-    for key in ("model_name", "revision", "local_dir", "mode", "resume_download"):
-        value = getattr(args, key)
-        if value is not None:
-            merged[key] = value
-    return merged
-
-
-def env_status() -> dict[str, str]:
-    """Return Hugging Face environment status without exposing secrets."""
-    return {
-        "HF_ENDPOINT": os.environ.get("HF_ENDPOINT", "not set"),
-        "HF_HOME": os.environ.get("HF_HOME", "not set"),
-        "HF_HUB_CACHE": os.environ.get("HF_HUB_CACHE", "not set"),
-        "HF_TOKEN": "set" if os.environ.get("HF_TOKEN") else "not set",
-    }
-
-
-def redact_secrets(text: str) -> str:
-    """Redact known secret environment variable values from loggable text."""
-    redacted = text
-    for name in ("HF_TOKEN", "WANDB_API_KEY"):
-        value = os.environ.get(name)
-        if value and len(value) >= 4:
-            redacted = redacted.replace(value, f"<{name}:redacted>")
-    return redacted
-
-
-def print_env_status() -> None:
-    """Print Hugging Face download environment without raw token values."""
-    print("Hugging Face environment:")
-    for name, value in env_status().items():
-        print(f"  {name}: {value}")
-
-
-def download_assets(config: dict[str, Any]) -> str:
-    """Download model assets and return the resolved snapshot path."""
+    args = build_parser().parse_args()
     try:
         from huggingface_hub import snapshot_download
-    except ImportError as exc:
-        raise RuntimeError(
-            "huggingface_hub is required for downloads. Install project dependencies with "
-            "`pip install -r requirements.txt`."
-        ) from exc
+    except Exception as exc:
+        raise RuntimeError("huggingface_hub is required. Install transformers or huggingface_hub.") from exc
 
-    model_name = str(config["model_name"])
-    revision = str(config.get("revision") or "main")
-    mode = str(config.get("mode", "cache"))
-    resume_download = bool(config.get("resume_download", True))
-
-    kwargs: dict[str, Any] = {
-        "repo_id": model_name,
-        "revision": revision,
-        "resume_download": resume_download,
-    }
-    hf_token = os.environ.get("HF_TOKEN")
-    if hf_token:
-        kwargs["token"] = hf_token
-
-    if mode == "local":
-        local_dir = Path(str(config.get("local_dir") or "models/deepseek-moe-16b-base"))
+    local_dir = Path(args.local_dir)
+    if args.mode == "local":
         local_dir.mkdir(parents=True, exist_ok=True)
+
+    kwargs = {
+        "repo_id": args.model_name,
+        "revision": args.revision,
+        "resume_download": args.resume_download,
+        "allow_patterns": args.allow_patterns,
+        "ignore_patterns": args.ignore_patterns,
+    }
+    kwargs.update(huggingface_token_kwargs())
+    if args.mode == "local":
         kwargs["local_dir"] = str(local_dir)
         kwargs["local_dir_use_symlinks"] = False
-        print(f"Downloading {model_name}@{revision} to local directory: {local_dir}")
-    elif mode == "cache":
-        print(f"Downloading {model_name}@{revision} to Hugging Face cache.")
-    else:
-        raise ValueError("mode must be either 'cache' or 'local'")
-
-    snapshot_path = snapshot_download(**kwargs)
-    return str(snapshot_path)
-
-
-def main() -> int:
-    """Run the download-only stage."""
-    args = parse_args()
-    config = apply_overrides(load_config(args.config), args)
-
-    print_env_status()
-    print(f"Download mode: {config['mode']}")
-    print(f"Model name: {config['model_name']}")
-    print(f"Revision: {config.get('revision', 'main')}")
-    if config["mode"] == "local":
-        print(f"Local directory: {config['local_dir']}")
 
     try:
-        snapshot_path = download_assets(config)
+        downloaded_path = snapshot_download(**kwargs)
     except Exception as exc:
-        print(f"Download failed: {type(exc).__name__}: {redact_secrets(str(exc))}", file=sys.stderr)
-        print(
-            "Suggestions: check network access, HF_ENDPOINT, Hugging Face permissions, "
-            "HF_HOME/cache disk space, and whether HF_TOKEN is set when needed.",
-            file=sys.stderr,
-        )
-        return 1
+        text = str(exc).lower()
+        if "no space left on device" in text or "disk quota" in text:
+            raise RuntimeError("Download failed because disk space is insufficient. Check HF_HOME and --local_dir.") from exc
+        if "401" in text or "403" in text or "gated" in text:
+            raise RuntimeError("Download failed due to authorization. Set HF_TOKEN in the environment if required.") from exc
+        raise RuntimeError(f"Download failed: {type(exc).__name__}: {exc}") from exc
 
-    print(f"Download complete: {snapshot_path}")
-    return 0
+    summary = {
+        "model_name": args.model_name,
+        "revision": args.revision,
+        "mode": args.mode,
+        "local_dir": str(local_dir),
+        "downloaded_path": downloaded_path,
+        "hf_environment": hf_environment_summary(),
+        "disk": disk_summary([local_dir, "models", "outputs"]),
+    }
+    path = write_json(args.summary_path, summary)
+    print(f"Wrote download summary to {path}")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
