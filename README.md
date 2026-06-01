@@ -75,7 +75,7 @@ Low-load experts receive positive bias and overused experts receive negative bia
 | 3 | LoRA / QLoRA continued pretraining scaffold | `scripts/train_lora.py`, `scripts/train_qlora.py`, `configs/train_lora_config.yaml`, `configs/train_qlora_config.yaml` |
 | 4 | p-bit router core and safe patch scaffold | `scripts/test_pbit_router_unit.py`, `scripts/inspect_router.py`, `configs/pbit_router_config.yaml` |
 | 5 | MiniGPT / Mini-MoE controllable experiments | `scripts/train_mini_moe.py`, `scripts/eval_mini_moe.py`, `configs/mini_moe_config.yaml` |
-| 6 | DeepSeek router inspection and patch planning | `scripts/inspect_router.py`, `src/router_patch.py` |
+| 6 | DeepSeek router inspection, runtime p-bit smoke patch, and patch planning | `scripts/inspect_router.py`, `scripts/train_deepseek_pbit_smoke.py`, `src/deepseek_pbit_patch.py`, `src/router_patch.py` |
 | 7 | Experiment orchestration and result collection | `scripts/collect_results.py`, `configs/result_collect_config.yaml` |
 
 ## Environment Setup
@@ -248,6 +248,38 @@ CUDA_VISIBLE_DEVICES=0 python scripts/inspect_router.py \
 ```
 
 The DeepSeek patch path must remain scaffold-only by default. Inspect first, then design a patch plan from the saved inspection report.
+
+## DeepSeek p-bit Smoke Training
+
+After router inspection confirms DeepSeek uses `MoEGate` under `model.layers.*.mlp.gate`, the repository provides an in-memory runtime patch for a very small continued-pretraining smoke test. It does not edit Hugging Face cache files and it does not run unless you explicitly execute the script.
+
+Use one shared output root on the server:
+
+```bash
+export EXP_ROOT="$(cd ..; pwd)"
+export PMOE_OUT="$EXP_ROOT/outputs"
+mkdir -p "$PMOE_OUT"
+```
+
+Baseline router smoke run:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/train_deepseek_pbit_smoke.py \
+  --config configs/train_deepseek_pbit_smoke.yaml \
+  --no_pbit_patch \
+  --output_dir "$PMOE_OUT/deepseek_baseline_router_smoke"
+```
+
+p-bit router smoke run:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/train_deepseek_pbit_smoke.py \
+  --config configs/train_deepseek_pbit_smoke.yaml \
+  --use_pbit_patch \
+  --output_dir "$PMOE_OUT/deepseek_pbit_router_smoke"
+```
+
+The first DeepSeek p-bit run should stay small, for example `max_steps: 20`, `block_size: 512`, and `freeze_non_router: true`. This only checks that forward/backward works, router gradients exist, and load metrics are recorded. It is not enough for a paper claim.
 
 ## Mini-MoE Workflow
 

@@ -1,0 +1,41 @@
+# Stage 6 DeepSeek-MoE p-bit router smoke continued-pretraining.
+# This is a manual GPU-server experiment. It loads DeepSeek-MoE only when run.
+model_name: deepseek-ai/deepseek-moe-16b-base
+output_dir: outputs/deepseek_pbit_smoke
+local_files_only: true
+trust_remote_code: true
+
+dataset_name: wikitext
+dataset_config_name: wikitext-2-raw-v1
+dataset_split: train
+text_column: text
+block_size: 512
+max_train_tokens: 65536
+
+dtype: bf16
+device_map: auto
+input_device: cuda:0
+offload_folder:
+gradient_checkpointing: true
+
+max_steps: 20
+gradient_accumulation_steps: 8
+learning_rate: 1.0e-5
+weight_decay: 0.0
+max_grad_norm: 1.0
+logging_steps: 5
+seed: 42
+
+# Baseline/p-bit switch.
+use_pbit_patch: true
+freeze_non_router: true
+
+# p-bit router parameters.
+alpha: 0.1
+beta: 0.1
+temperature: 1.0
+min_temperature: 0.2
+load_ema_decay: 0.99
+use_load_bias: true
+use_competition: true
+patch_train_only: true
