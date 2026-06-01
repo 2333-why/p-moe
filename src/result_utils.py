@@ -120,7 +120,14 @@ def normalize_record(path: Path, outputs_dir: Path) -> ResultRecord:
     metrics = data.get("metrics", {})
     if not isinstance(metrics, dict):
         metrics = {}
-    merged = {**data, **metrics}
+    final_eval = data.get("final_eval", {})
+    if not isinstance(final_eval, dict):
+        final_eval = {}
+    model_config = data.get("model_config", {})
+    if not isinstance(model_config, dict):
+        model_config = {}
+
+    merged = {**data, **metrics, **final_eval, **model_config}
 
     error_message = str(_first_value(merged, ("error_message", "error", "exception"), ""))
     success = _as_bool(_first_value(merged, ("success", "ok", "completed"), not error_message))

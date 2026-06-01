@@ -37,6 +37,32 @@ def local_model_exists(model_name: str) -> bool:
     return Path(model_name).expanduser().exists()
 
 
+def looks_like_local_model_path(model_name: str) -> bool:
+    """Return true when a model reference is intended to be a filesystem path."""
+
+    path = Path(model_name).expanduser()
+    return (
+        path.is_absolute()
+        or model_name.startswith(("./", "../", "~/"))
+        or model_name == "models"
+        or model_name.startswith("models/")
+        or model_name.startswith("models\\")
+    )
+
+
+def looks_like_local_model_path(model_name: str) -> bool:
+    """Return true when a model reference is intended to be a filesystem path."""
+
+    path = Path(model_name).expanduser()
+    return (
+        path.is_absolute()
+        or model_name.startswith(("./", "../", "~/"))
+        or model_name == "models"
+        or model_name.startswith("models/")
+        or model_name.startswith("models\\")
+    )
+
+
 def build_model_load_kwargs(
     *,
     dtype: str = "bf16",
@@ -145,7 +171,11 @@ def load_causal_lm(
     except Exception as exc:  # pragma: no cover - dependency diagnostic
         raise RuntimeError("transformers is required to load causal LMs. Install requirements.txt.") from exc
 
-    if local_files_only and not local_model_exists(model_name):
+    if (
+        local_files_only
+        and looks_like_local_model_path(model_name)
+        and not local_model_exists(model_name)
+    ):
         raise RuntimeError(
             f"Local model path {model_name!r} does not exist while --local_files_only is set. "
             "Download assets first or pass a valid local directory."
