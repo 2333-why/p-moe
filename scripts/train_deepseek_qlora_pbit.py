@@ -55,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dataset_name", default=None)
     parser.add_argument("--dataset_config_name", default=None)
     parser.add_argument("--dataset_split", default=None)
+    parser.add_argument("--text_column", default=None)
     parser.add_argument("--block_size", type=int, default=None)
     parser.add_argument("--max_steps", type=int, default=None)
     parser.add_argument("--per_device_train_batch_size", type=int, default=None)
