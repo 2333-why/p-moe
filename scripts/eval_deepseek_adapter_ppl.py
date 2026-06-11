@@ -33,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output_dir", default="outputs")
     parser.add_argument("--local_files_only", type=str_to_bool, nargs="?", const=True, default=True)
     parser.add_argument("--dataset_name", default="wikitext")
-    parser.add_argument("--dataset_config_name", default="wikitext-2-raw-v1")
+    parser.add_argument("--dataset_config_name", default=None)
     parser.add_argument("--split", default="test")
     parser.add_argument("--text_column", default="text")
     parser.add_argument("--block_size", type=int, default=2048)
@@ -152,6 +152,8 @@ def _merge_config(args: argparse.Namespace) -> Dict[str, Any]:
             continue
         if value is not None:
             config[key] = value
+    if config.get("dataset_config_name") == "":
+        config["dataset_config_name"] = None
     return config
 
 

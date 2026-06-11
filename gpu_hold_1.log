@@ -1,0 +1,692 @@
+nohup: ignoring input
+Device cuda:1: NVIDIA H200 | total=139.81 GiB free=139.30 GiB
+Allocating 100.00 GiB using uint8.
+chunk=0001 requested=1.00 GiB allocated=1.00 GiB reserved=1.00 GiB
+chunk=0002 requested=2.00 GiB allocated=2.00 GiB reserved=2.00 GiB
+chunk=0003 requested=3.00 GiB allocated=3.00 GiB reserved=3.00 GiB
+chunk=0004 requested=4.00 GiB allocated=4.00 GiB reserved=4.00 GiB
+chunk=0005 requested=5.00 GiB allocated=5.00 GiB reserved=5.00 GiB
+chunk=0006 requested=6.00 GiB allocated=6.00 GiB reserved=6.00 GiB
+chunk=0007 requested=7.00 GiB allocated=7.00 GiB reserved=7.00 GiB
+chunk=0008 requested=8.00 GiB allocated=8.00 GiB reserved=8.00 GiB
+chunk=0009 requested=9.00 GiB allocated=9.00 GiB reserved=9.00 GiB
+chunk=0010 requested=10.00 GiB allocated=10.00 GiB reserved=10.00 GiB
+chunk=0011 requested=11.00 GiB allocated=11.00 GiB reserved=11.00 GiB
+chunk=0012 requested=12.00 GiB allocated=12.00 GiB reserved=12.00 GiB
+chunk=0013 requested=13.00 GiB allocated=13.00 GiB reserved=13.00 GiB
+chunk=0014 requested=14.00 GiB allocated=14.00 GiB reserved=14.00 GiB
+chunk=0015 requested=15.00 GiB allocated=15.00 GiB reserved=15.00 GiB
+chunk=0016 requested=16.00 GiB allocated=16.00 GiB reserved=16.00 GiB
+chunk=0017 requested=17.00 GiB allocated=17.00 GiB reserved=17.00 GiB
+chunk=0018 requested=18.00 GiB allocated=18.00 GiB reserved=18.00 GiB
+chunk=0019 requested=19.00 GiB allocated=19.00 GiB reserved=19.00 GiB
+chunk=0020 requested=20.00 GiB allocated=20.00 GiB reserved=20.00 GiB
+chunk=0021 requested=21.00 GiB allocated=21.00 GiB reserved=21.00 GiB
+chunk=0022 requested=22.00 GiB allocated=22.00 GiB reserved=22.00 GiB
+chunk=0023 requested=23.00 GiB allocated=23.00 GiB reserved=23.00 GiB
+chunk=0024 requested=24.00 GiB allocated=24.00 GiB reserved=24.00 GiB
+chunk=0025 requested=25.00 GiB allocated=25.00 GiB reserved=25.00 GiB
+chunk=0026 requested=26.00 GiB allocated=26.00 GiB reserved=26.00 GiB
+chunk=0027 requested=27.00 GiB allocated=27.00 GiB reserved=27.00 GiB
+chunk=0028 requested=28.00 GiB allocated=28.00 GiB reserved=28.00 GiB
+chunk=0029 requested=29.00 GiB allocated=29.00 GiB reserved=29.00 GiB
+chunk=0030 requested=30.00 GiB allocated=30.00 GiB reserved=30.00 GiB
+chunk=0031 requested=31.00 GiB allocated=31.00 GiB reserved=31.00 GiB
+chunk=0032 requested=32.00 GiB allocated=32.00 GiB reserved=32.00 GiB
+chunk=0033 requested=33.00 GiB allocated=33.00 GiB reserved=33.00 GiB
+chunk=0034 requested=34.00 GiB allocated=34.00 GiB reserved=34.00 GiB
+chunk=0035 requested=35.00 GiB allocated=35.00 GiB reserved=35.00 GiB
+chunk=0036 requested=36.00 GiB allocated=36.00 GiB reserved=36.00 GiB
+chunk=0037 requested=37.00 GiB allocated=37.00 GiB reserved=37.00 GiB
+chunk=0038 requested=38.00 GiB allocated=38.00 GiB reserved=38.00 GiB
+chunk=0039 requested=39.00 GiB allocated=39.00 GiB reserved=39.00 GiB
+chunk=0040 requested=40.00 GiB allocated=40.00 GiB reserved=40.00 GiB
+chunk=0041 requested=41.00 GiB allocated=41.00 GiB reserved=41.00 GiB
+chunk=0042 requested=42.00 GiB allocated=42.00 GiB reserved=42.00 GiB
+chunk=0043 requested=43.00 GiB allocated=43.00 GiB reserved=43.00 GiB
+chunk=0044 requested=44.00 GiB allocated=44.00 GiB reserved=44.00 GiB
+chunk=0045 requested=45.00 GiB allocated=45.00 GiB reserved=45.00 GiB
+chunk=0046 requested=46.00 GiB allocated=46.00 GiB reserved=46.00 GiB
+chunk=0047 requested=47.00 GiB allocated=47.00 GiB reserved=47.00 GiB
+chunk=0048 requested=48.00 GiB allocated=48.00 GiB reserved=48.00 GiB
+chunk=0049 requested=49.00 GiB allocated=49.00 GiB reserved=49.00 GiB
+chunk=0050 requested=50.00 GiB allocated=50.00 GiB reserved=50.00 GiB
+chunk=0051 requested=51.00 GiB allocated=51.00 GiB reserved=51.00 GiB
+chunk=0052 requested=52.00 GiB allocated=52.00 GiB reserved=52.00 GiB
+chunk=0053 requested=53.00 GiB allocated=53.00 GiB reserved=53.00 GiB
+chunk=0054 requested=54.00 GiB allocated=54.00 GiB reserved=54.00 GiB
+chunk=0055 requested=55.00 GiB allocated=55.00 GiB reserved=55.00 GiB
+chunk=0056 requested=56.00 GiB allocated=56.00 GiB reserved=56.00 GiB
+chunk=0057 requested=57.00 GiB allocated=57.00 GiB reserved=57.00 GiB
+chunk=0058 requested=58.00 GiB allocated=58.00 GiB reserved=58.00 GiB
+chunk=0059 requested=59.00 GiB allocated=59.00 GiB reserved=59.00 GiB
+chunk=0060 requested=60.00 GiB allocated=60.00 GiB reserved=60.00 GiB
+chunk=0061 requested=61.00 GiB allocated=61.00 GiB reserved=61.00 GiB
+chunk=0062 requested=62.00 GiB allocated=62.00 GiB reserved=62.00 GiB
+chunk=0063 requested=63.00 GiB allocated=63.00 GiB reserved=63.00 GiB
+chunk=0064 requested=64.00 GiB allocated=64.00 GiB reserved=64.00 GiB
+chunk=0065 requested=65.00 GiB allocated=65.00 GiB reserved=65.00 GiB
+chunk=0066 requested=66.00 GiB allocated=66.00 GiB reserved=66.00 GiB
+chunk=0067 requested=67.00 GiB allocated=67.00 GiB reserved=67.00 GiB
+chunk=0068 requested=68.00 GiB allocated=68.00 GiB reserved=68.00 GiB
+chunk=0069 requested=69.00 GiB allocated=69.00 GiB reserved=69.00 GiB
+chunk=0070 requested=70.00 GiB allocated=70.00 GiB reserved=70.00 GiB
+chunk=0071 requested=71.00 GiB allocated=71.00 GiB reserved=71.00 GiB
+chunk=0072 requested=72.00 GiB allocated=72.00 GiB reserved=72.00 GiB
+chunk=0073 requested=73.00 GiB allocated=73.00 GiB reserved=73.00 GiB
+chunk=0074 requested=74.00 GiB allocated=74.00 GiB reserved=74.00 GiB
+chunk=0075 requested=75.00 GiB allocated=75.00 GiB reserved=75.00 GiB
+chunk=0076 requested=76.00 GiB allocated=76.00 GiB reserved=76.00 GiB
+chunk=0077 requested=77.00 GiB allocated=77.00 GiB reserved=77.00 GiB
+chunk=0078 requested=78.00 GiB allocated=78.00 GiB reserved=78.00 GiB
+chunk=0079 requested=79.00 GiB allocated=79.00 GiB reserved=79.00 GiB
+chunk=0080 requested=80.00 GiB allocated=80.00 GiB reserved=80.00 GiB
+chunk=0081 requested=81.00 GiB allocated=81.00 GiB reserved=81.00 GiB
+chunk=0082 requested=82.00 GiB allocated=82.00 GiB reserved=82.00 GiB
+chunk=0083 requested=83.00 GiB allocated=83.00 GiB reserved=83.00 GiB
+chunk=0084 requested=84.00 GiB allocated=84.00 GiB reserved=84.00 GiB
+chunk=0085 requested=85.00 GiB allocated=85.00 GiB reserved=85.00 GiB
+chunk=0086 requested=86.00 GiB allocated=86.00 GiB reserved=86.00 GiB
+chunk=0087 requested=87.00 GiB allocated=87.00 GiB reserved=87.00 GiB
+chunk=0088 requested=88.00 GiB allocated=88.00 GiB reserved=88.00 GiB
+chunk=0089 requested=89.00 GiB allocated=89.00 GiB reserved=89.00 GiB
+chunk=0090 requested=90.00 GiB allocated=90.00 GiB reserved=90.00 GiB
+chunk=0091 requested=91.00 GiB allocated=91.00 GiB reserved=91.00 GiB
+chunk=0092 requested=92.00 GiB allocated=92.00 GiB reserved=92.00 GiB
+chunk=0093 requested=93.00 GiB allocated=93.00 GiB reserved=93.00 GiB
+chunk=0094 requested=94.00 GiB allocated=94.00 GiB reserved=94.00 GiB
+chunk=0095 requested=95.00 GiB allocated=95.00 GiB reserved=95.00 GiB
+chunk=0096 requested=96.00 GiB allocated=96.00 GiB reserved=96.00 GiB
+chunk=0097 requested=97.00 GiB allocated=97.00 GiB reserved=97.00 GiB
+chunk=0098 requested=98.00 GiB allocated=98.00 GiB reserved=98.00 GiB
+chunk=0099 requested=99.00 GiB allocated=99.00 GiB reserved=99.00 GiB
+chunk=0100 requested=100.00 GiB allocated=100.00 GiB reserved=100.00 GiB
+holding memory... elapsed=0s
+holding memory... elapsed=30s
+holding memory... elapsed=60s
+holding memory... elapsed=90s
+holding memory... elapsed=120s
+holding memory... elapsed=150s
+holding memory... elapsed=180s
+holding memory... elapsed=210s
+holding memory... elapsed=240s
+holding memory... elapsed=270s
+holding memory... elapsed=300s
+holding memory... elapsed=330s
+holding memory... elapsed=360s
+holding memory... elapsed=390s
+holding memory... elapsed=420s
+holding memory... elapsed=450s
+holding memory... elapsed=480s
+holding memory... elapsed=511s
+holding memory... elapsed=541s
+holding memory... elapsed=571s
+holding memory... elapsed=601s
+holding memory... elapsed=631s
+holding memory... elapsed=661s
+holding memory... elapsed=691s
+holding memory... elapsed=721s
+holding memory... elapsed=751s
+holding memory... elapsed=781s
+holding memory... elapsed=811s
+holding memory... elapsed=841s
+holding memory... elapsed=871s
+holding memory... elapsed=901s
+holding memory... elapsed=931s
+holding memory... elapsed=961s
+holding memory... elapsed=991s
+holding memory... elapsed=1021s
+holding memory... elapsed=1051s
+holding memory... elapsed=1081s
+holding memory... elapsed=1111s
+holding memory... elapsed=1141s
+holding memory... elapsed=1171s
+holding memory... elapsed=1201s
+holding memory... elapsed=1231s
+holding memory... elapsed=1261s
+holding memory... elapsed=1291s
+holding memory... elapsed=1321s
+holding memory... elapsed=1351s
+holding memory... elapsed=1381s
+holding memory... elapsed=1411s
+holding memory... elapsed=1441s
+holding memory... elapsed=1471s
+holding memory... elapsed=1501s
+holding memory... elapsed=1531s
+holding memory... elapsed=1561s
+holding memory... elapsed=1592s
+holding memory... elapsed=1622s
+holding memory... elapsed=1652s
+holding memory... elapsed=1682s
+holding memory... elapsed=1712s
+holding memory... elapsed=1742s
+holding memory... elapsed=1772s
+holding memory... elapsed=1802s
+holding memory... elapsed=1832s
+holding memory... elapsed=1862s
+holding memory... elapsed=1892s
+holding memory... elapsed=1922s
+holding memory... elapsed=1952s
+holding memory... elapsed=1982s
+holding memory... elapsed=2012s
+holding memory... elapsed=2042s
+holding memory... elapsed=2072s
+holding memory... elapsed=2102s
+holding memory... elapsed=2132s
+holding memory... elapsed=2162s
+holding memory... elapsed=2192s
+holding memory... elapsed=2222s
+holding memory... elapsed=2252s
+holding memory... elapsed=2282s
+holding memory... elapsed=2312s
+holding memory... elapsed=2342s
+holding memory... elapsed=2372s
+holding memory... elapsed=2402s
+holding memory... elapsed=2432s
+holding memory... elapsed=2462s
+holding memory... elapsed=2492s
+holding memory... elapsed=2522s
+holding memory... elapsed=2552s
+holding memory... elapsed=2582s
+holding memory... elapsed=2612s
+holding memory... elapsed=2643s
+holding memory... elapsed=2673s
+holding memory... elapsed=2703s
+holding memory... elapsed=2733s
+holding memory... elapsed=2763s
+holding memory... elapsed=2793s
+holding memory... elapsed=2823s
+holding memory... elapsed=2853s
+holding memory... elapsed=2883s
+holding memory... elapsed=2913s
+holding memory... elapsed=2943s
+holding memory... elapsed=2973s
+holding memory... elapsed=3003s
+holding memory... elapsed=3033s
+holding memory... elapsed=3063s
+holding memory... elapsed=3093s
+holding memory... elapsed=3123s
+holding memory... elapsed=3153s
+holding memory... elapsed=3183s
+holding memory... elapsed=3213s
+holding memory... elapsed=3243s
+holding memory... elapsed=3273s
+holding memory... elapsed=3303s
+holding memory... elapsed=3333s
+holding memory... elapsed=3363s
+holding memory... elapsed=3393s
+holding memory... elapsed=3423s
+holding memory... elapsed=3453s
+holding memory... elapsed=3483s
+holding memory... elapsed=3513s
+holding memory... elapsed=3543s
+holding memory... elapsed=3573s
+holding memory... elapsed=3603s
+holding memory... elapsed=3633s
+holding memory... elapsed=3663s
+holding memory... elapsed=3693s
+holding memory... elapsed=3724s
+holding memory... elapsed=3754s
+holding memory... elapsed=3784s
+holding memory... elapsed=3814s
+holding memory... elapsed=3844s
+holding memory... elapsed=3874s
+holding memory... elapsed=3904s
+holding memory... elapsed=3934s
+holding memory... elapsed=3964s
+holding memory... elapsed=3994s
+holding memory... elapsed=4024s
+holding memory... elapsed=4054s
+holding memory... elapsed=4084s
+holding memory... elapsed=4114s
+holding memory... elapsed=4144s
+holding memory... elapsed=4174s
+holding memory... elapsed=4204s
+holding memory... elapsed=4234s
+holding memory... elapsed=4264s
+holding memory... elapsed=4294s
+holding memory... elapsed=4324s
+holding memory... elapsed=4354s
+holding memory... elapsed=4384s
+holding memory... elapsed=4414s
+holding memory... elapsed=4444s
+holding memory... elapsed=4474s
+holding memory... elapsed=4504s
+holding memory... elapsed=4534s
+holding memory... elapsed=4564s
+holding memory... elapsed=4594s
+holding memory... elapsed=4624s
+holding memory... elapsed=4654s
+holding memory... elapsed=4684s
+holding memory... elapsed=4714s
+holding memory... elapsed=4744s
+holding memory... elapsed=4774s
+holding memory... elapsed=4805s
+holding memory... elapsed=4835s
+holding memory... elapsed=4865s
+holding memory... elapsed=4895s
+holding memory... elapsed=4925s
+holding memory... elapsed=4955s
+holding memory... elapsed=4985s
+holding memory... elapsed=5015s
+holding memory... elapsed=5045s
+holding memory... elapsed=5075s
+holding memory... elapsed=5105s
+holding memory... elapsed=5135s
+holding memory... elapsed=5165s
+holding memory... elapsed=5195s
+holding memory... elapsed=5225s
+holding memory... elapsed=5255s
+holding memory... elapsed=5285s
+holding memory... elapsed=5315s
+holding memory... elapsed=5345s
+holding memory... elapsed=5375s
+holding memory... elapsed=5405s
+holding memory... elapsed=5435s
+holding memory... elapsed=5465s
+holding memory... elapsed=5495s
+holding memory... elapsed=5525s
+holding memory... elapsed=5555s
+holding memory... elapsed=5585s
+holding memory... elapsed=5615s
+holding memory... elapsed=5645s
+holding memory... elapsed=5675s
+holding memory... elapsed=5705s
+holding memory... elapsed=5735s
+holding memory... elapsed=5765s
+holding memory... elapsed=5795s
+holding memory... elapsed=5825s
+holding memory... elapsed=5856s
+holding memory... elapsed=5886s
+holding memory... elapsed=5916s
+holding memory... elapsed=5946s
+holding memory... elapsed=5976s
+holding memory... elapsed=6006s
+holding memory... elapsed=6036s
+holding memory... elapsed=6066s
+holding memory... elapsed=6096s
+holding memory... elapsed=6126s
+holding memory... elapsed=6156s
+holding memory... elapsed=6186s
+holding memory... elapsed=6216s
+holding memory... elapsed=6246s
+holding memory... elapsed=6276s
+holding memory... elapsed=6306s
+holding memory... elapsed=6336s
+holding memory... elapsed=6366s
+holding memory... elapsed=6396s
+holding memory... elapsed=6426s
+holding memory... elapsed=6456s
+holding memory... elapsed=6486s
+holding memory... elapsed=6516s
+holding memory... elapsed=6546s
+holding memory... elapsed=6576s
+holding memory... elapsed=6606s
+holding memory... elapsed=6636s
+holding memory... elapsed=6666s
+holding memory... elapsed=6696s
+holding memory... elapsed=6726s
+holding memory... elapsed=6756s
+holding memory... elapsed=6786s
+holding memory... elapsed=6816s
+holding memory... elapsed=6846s
+holding memory... elapsed=6876s
+holding memory... elapsed=6906s
+holding memory... elapsed=6937s
+holding memory... elapsed=6967s
+holding memory... elapsed=6997s
+holding memory... elapsed=7027s
+holding memory... elapsed=7057s
+holding memory... elapsed=7087s
+holding memory... elapsed=7117s
+holding memory... elapsed=7147s
+holding memory... elapsed=7177s
+holding memory... elapsed=7207s
+holding memory... elapsed=7237s
+holding memory... elapsed=7267s
+holding memory... elapsed=7297s
+holding memory... elapsed=7327s
+holding memory... elapsed=7357s
+holding memory... elapsed=7387s
+holding memory... elapsed=7417s
+holding memory... elapsed=7447s
+holding memory... elapsed=7477s
+holding memory... elapsed=7507s
+holding memory... elapsed=7537s
+holding memory... elapsed=7567s
+holding memory... elapsed=7597s
+holding memory... elapsed=7627s
+holding memory... elapsed=7657s
+holding memory... elapsed=7687s
+holding memory... elapsed=7717s
+holding memory... elapsed=7747s
+holding memory... elapsed=7777s
+holding memory... elapsed=7807s
+holding memory... elapsed=7837s
+holding memory... elapsed=7867s
+holding memory... elapsed=7897s
+holding memory... elapsed=7927s
+holding memory... elapsed=7957s
+holding memory... elapsed=7987s
+holding memory... elapsed=8018s
+holding memory... elapsed=8048s
+holding memory... elapsed=8078s
+holding memory... elapsed=8108s
+holding memory... elapsed=8138s
+holding memory... elapsed=8168s
+holding memory... elapsed=8198s
+holding memory... elapsed=8228s
+holding memory... elapsed=8258s
+holding memory... elapsed=8288s
+holding memory... elapsed=8318s
+holding memory... elapsed=8348s
+holding memory... elapsed=8378s
+holding memory... elapsed=8408s
+holding memory... elapsed=8438s
+holding memory... elapsed=8468s
+holding memory... elapsed=8498s
+holding memory... elapsed=8528s
+holding memory... elapsed=8558s
+holding memory... elapsed=8588s
+holding memory... elapsed=8618s
+holding memory... elapsed=8648s
+holding memory... elapsed=8678s
+holding memory... elapsed=8708s
+holding memory... elapsed=8738s
+holding memory... elapsed=8768s
+holding memory... elapsed=8798s
+holding memory... elapsed=8828s
+holding memory... elapsed=8858s
+holding memory... elapsed=8888s
+holding memory... elapsed=8918s
+holding memory... elapsed=8948s
+holding memory... elapsed=8978s
+holding memory... elapsed=9008s
+holding memory... elapsed=9038s
+holding memory... elapsed=9069s
+holding memory... elapsed=9099s
+holding memory... elapsed=9129s
+holding memory... elapsed=9159s
+holding memory... elapsed=9189s
+holding memory... elapsed=9219s
+holding memory... elapsed=9249s
+holding memory... elapsed=9279s
+holding memory... elapsed=9309s
+holding memory... elapsed=9339s
+holding memory... elapsed=9369s
+holding memory... elapsed=9399s
+holding memory... elapsed=9429s
+holding memory... elapsed=9459s
+holding memory... elapsed=9489s
+holding memory... elapsed=9519s
+holding memory... elapsed=9549s
+holding memory... elapsed=9579s
+holding memory... elapsed=9609s
+holding memory... elapsed=9639s
+holding memory... elapsed=9669s
+holding memory... elapsed=9699s
+holding memory... elapsed=9729s
+holding memory... elapsed=9759s
+holding memory... elapsed=9789s
+holding memory... elapsed=9819s
+holding memory... elapsed=9849s
+holding memory... elapsed=9879s
+holding memory... elapsed=9909s
+holding memory... elapsed=9939s
+holding memory... elapsed=9969s
+holding memory... elapsed=9999s
+holding memory... elapsed=10029s
+holding memory... elapsed=10059s
+holding memory... elapsed=10089s
+holding memory... elapsed=10119s
+holding memory... elapsed=10150s
+holding memory... elapsed=10180s
+holding memory... elapsed=10210s
+holding memory... elapsed=10240s
+holding memory... elapsed=10270s
+holding memory... elapsed=10300s
+holding memory... elapsed=10330s
+holding memory... elapsed=10360s
+holding memory... elapsed=10390s
+holding memory... elapsed=10420s
+holding memory... elapsed=10450s
+holding memory... elapsed=10480s
+holding memory... elapsed=10510s
+holding memory... elapsed=10540s
+holding memory... elapsed=10570s
+holding memory... elapsed=10600s
+holding memory... elapsed=10630s
+holding memory... elapsed=10660s
+holding memory... elapsed=10690s
+holding memory... elapsed=10720s
+holding memory... elapsed=10750s
+holding memory... elapsed=10780s
+holding memory... elapsed=10810s
+holding memory... elapsed=10840s
+holding memory... elapsed=10870s
+holding memory... elapsed=10900s
+holding memory... elapsed=10930s
+holding memory... elapsed=10960s
+holding memory... elapsed=10990s
+holding memory... elapsed=11020s
+holding memory... elapsed=11050s
+holding memory... elapsed=11080s
+holding memory... elapsed=11110s
+holding memory... elapsed=11140s
+holding memory... elapsed=11170s
+holding memory... elapsed=11200s
+holding memory... elapsed=11231s
+holding memory... elapsed=11261s
+holding memory... elapsed=11291s
+holding memory... elapsed=11321s
+holding memory... elapsed=11351s
+holding memory... elapsed=11381s
+holding memory... elapsed=11411s
+holding memory... elapsed=11441s
+holding memory... elapsed=11471s
+holding memory... elapsed=11501s
+holding memory... elapsed=11531s
+holding memory... elapsed=11561s
+holding memory... elapsed=11591s
+holding memory... elapsed=11621s
+holding memory... elapsed=11651s
+holding memory... elapsed=11681s
+holding memory... elapsed=11711s
+holding memory... elapsed=11741s
+holding memory... elapsed=11771s
+holding memory... elapsed=11801s
+holding memory... elapsed=11831s
+holding memory... elapsed=11861s
+holding memory... elapsed=11891s
+holding memory... elapsed=11921s
+holding memory... elapsed=11951s
+holding memory... elapsed=11981s
+holding memory... elapsed=12011s
+holding memory... elapsed=12041s
+holding memory... elapsed=12071s
+holding memory... elapsed=12101s
+holding memory... elapsed=12131s
+holding memory... elapsed=12161s
+holding memory... elapsed=12191s
+holding memory... elapsed=12221s
+holding memory... elapsed=12251s
+holding memory... elapsed=12281s
+holding memory... elapsed=12312s
+holding memory... elapsed=12342s
+holding memory... elapsed=12372s
+holding memory... elapsed=12402s
+holding memory... elapsed=12432s
+holding memory... elapsed=12462s
+holding memory... elapsed=12492s
+holding memory... elapsed=12522s
+holding memory... elapsed=12552s
+holding memory... elapsed=12582s
+holding memory... elapsed=12612s
+holding memory... elapsed=12642s
+holding memory... elapsed=12672s
+holding memory... elapsed=12702s
+holding memory... elapsed=12732s
+holding memory... elapsed=12762s
+holding memory... elapsed=12792s
+holding memory... elapsed=12822s
+holding memory... elapsed=12852s
+holding memory... elapsed=12882s
+holding memory... elapsed=12912s
+holding memory... elapsed=12942s
+holding memory... elapsed=12972s
+holding memory... elapsed=13002s
+holding memory... elapsed=13032s
+holding memory... elapsed=13062s
+holding memory... elapsed=13092s
+holding memory... elapsed=13122s
+holding memory... elapsed=13152s
+holding memory... elapsed=13182s
+holding memory... elapsed=13212s
+holding memory... elapsed=13242s
+holding memory... elapsed=13272s
+holding memory... elapsed=13302s
+holding memory... elapsed=13332s
+holding memory... elapsed=13363s
+holding memory... elapsed=13393s
+holding memory... elapsed=13423s
+holding memory... elapsed=13453s
+holding memory... elapsed=13483s
+holding memory... elapsed=13513s
+holding memory... elapsed=13543s
+holding memory... elapsed=13573s
+holding memory... elapsed=13603s
+holding memory... elapsed=13633s
+holding memory... elapsed=13663s
+holding memory... elapsed=13693s
+holding memory... elapsed=13723s
+holding memory... elapsed=13753s
+holding memory... elapsed=13783s
+holding memory... elapsed=13813s
+holding memory... elapsed=13843s
+holding memory... elapsed=13873s
+holding memory... elapsed=13903s
+holding memory... elapsed=13933s
+holding memory... elapsed=13963s
+holding memory... elapsed=13993s
+holding memory... elapsed=14023s
+holding memory... elapsed=14053s
+holding memory... elapsed=14083s
+holding memory... elapsed=14113s
+holding memory... elapsed=14143s
+holding memory... elapsed=14173s
+holding memory... elapsed=14203s
+holding memory... elapsed=14233s
+holding memory... elapsed=14263s
+holding memory... elapsed=14293s
+holding memory... elapsed=14323s
+holding memory... elapsed=14353s
+holding memory... elapsed=14383s
+holding memory... elapsed=14413s
+holding memory... elapsed=14444s
+holding memory... elapsed=14474s
+holding memory... elapsed=14504s
+holding memory... elapsed=14534s
+holding memory... elapsed=14564s
+holding memory... elapsed=14594s
+holding memory... elapsed=14624s
+holding memory... elapsed=14654s
+holding memory... elapsed=14684s
+holding memory... elapsed=14714s
+holding memory... elapsed=14744s
+holding memory... elapsed=14774s
+holding memory... elapsed=14804s
+holding memory... elapsed=14834s
+holding memory... elapsed=14864s
+holding memory... elapsed=14894s
+holding memory... elapsed=14924s
+holding memory... elapsed=14954s
+holding memory... elapsed=14984s
+holding memory... elapsed=15014s
+holding memory... elapsed=15044s
+holding memory... elapsed=15074s
+holding memory... elapsed=15104s
+holding memory... elapsed=15134s
+holding memory... elapsed=15164s
+holding memory... elapsed=15194s
+holding memory... elapsed=15224s
+holding memory... elapsed=15254s
+holding memory... elapsed=15284s
+holding memory... elapsed=15314s
+holding memory... elapsed=15344s
+holding memory... elapsed=15374s
+holding memory... elapsed=15404s
+holding memory... elapsed=15434s
+holding memory... elapsed=15464s
+holding memory... elapsed=15495s
+holding memory... elapsed=15525s
+holding memory... elapsed=15555s
+holding memory... elapsed=15585s
+holding memory... elapsed=15615s
+holding memory... elapsed=15645s
+holding memory... elapsed=15675s
+holding memory... elapsed=15705s
+holding memory... elapsed=15735s
+holding memory... elapsed=15765s
+holding memory... elapsed=15795s
+holding memory... elapsed=15825s
+holding memory... elapsed=15855s
+holding memory... elapsed=15885s
+holding memory... elapsed=15915s
+holding memory... elapsed=15945s
+holding memory... elapsed=15975s
+holding memory... elapsed=16005s
+holding memory... elapsed=16035s
+holding memory... elapsed=16065s
+holding memory... elapsed=16095s
+holding memory... elapsed=16125s
+holding memory... elapsed=16155s
+holding memory... elapsed=16185s
+holding memory... elapsed=16215s
+holding memory... elapsed=16245s
+holding memory... elapsed=16275s
+holding memory... elapsed=16305s
+holding memory... elapsed=16335s
+holding memory... elapsed=16365s
+holding memory... elapsed=16395s
+holding memory... elapsed=16425s
+holding memory... elapsed=16455s
+holding memory... elapsed=16485s
+holding memory... elapsed=16515s
+holding memory... elapsed=16545s
+holding memory... elapsed=16576s
+holding memory... elapsed=16606s
+holding memory... elapsed=16636s
+holding memory... elapsed=16666s
+holding memory... elapsed=16696s
+holding memory... elapsed=16726s
+holding memory... elapsed=16756s
+holding memory... elapsed=16786s
+holding memory... elapsed=16816s
+holding memory... elapsed=16846s
+holding memory... elapsed=16876s
+holding memory... elapsed=16906s
+holding memory... elapsed=16936s
+holding memory... elapsed=16966s
+holding memory... elapsed=16996s
+holding memory... elapsed=17026s
+holding memory... elapsed=17056s
+holding memory... elapsed=17086s
+holding memory... elapsed=17116s
+holding memory... elapsed=17146s
+holding memory... elapsed=17176s
+holding memory... elapsed=17206s
+holding memory... elapsed=17236s
+holding memory... elapsed=17266s
+holding memory... elapsed=17296s
+holding memory... elapsed=17326s
+holding memory... elapsed=17356s
+holding memory... elapsed=17386s
+holding memory... elapsed=17416s
+holding memory... elapsed=17446s
+holding memory... elapsed=17476s
+holding memory... elapsed=17506s
+holding memory... elapsed=17536s
+holding memory... elapsed=17566s
+holding memory... elapsed=17596s
+holding memory... elapsed=17626s
+holding memory... elapsed=17657s
