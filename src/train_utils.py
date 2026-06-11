@@ -164,9 +164,12 @@ def load_text_dataset(config: Mapping[str, Any]):
     dataset_name = config.get("dataset_name")
     if not dataset_name:
         raise ValueError("dataset_name is required for continued pretraining.")
+    dataset_config_name = config.get("dataset_config_name")
+    args = [str(dataset_name)]
+    if dataset_config_name not in (None, "", "null", "None"):
+        args.append(str(dataset_config_name))
     return datasets.load_dataset(
-        str(dataset_name),
-        config.get("dataset_config_name"),
+        *args,
         split=str(config.get("dataset_split", "train")),
         data_files=config.get("data_files"),
         streaming=bool(config.get("streaming", False)),

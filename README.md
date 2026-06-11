@@ -1,32 +1,4 @@
-NEW="/inspire/qb-ilm/project/advanced-machine-learning/yanjunchi-24040/why/software/miniconda3"
-ENV="/inspire/qb-ilm/project/advanced-machine-learning/yanjunchi-24040/why/envs/deepseek_moe"
-
-unset -f conda 2>/dev/null || true
-unset -f __conda_exe 2>/dev/null || true
-unset -f __conda_activate 2>/dev/null || true
-unset -f __conda_hashr 2>/dev/null || true
-unalias conda 2>/dev/null || true
-hash -r
-
-eval "$("$NEW/bin/conda" shell.bash hook)"
-conda activate "$ENV"
-
-
-cd /inspire/qb-ilm/project/advanced-machine-learning/yanjunchi-24040/why/p-moe
-
-export EXP_ROOT=/inspire/qb-ilm/project/advanced-machine-learning/yanjunchi-24040/why
-export PMOE_OUT="$EXP_ROOT/outputs"
-
-export HF_HOME=/inspire/hdd/global_user/yanjunchi-24040/huggingface
-export HF_HUB_CACHE="$HF_HOME/hub"
-export HF_DATASETS_CACHE="$HF_HOME/datasets"
-
-export HF_HUB_OFFLINE=1
-export HF_DATASETS_OFFLINE=1
-export TRANSFORMERS_OFFLINE=1
-
-echo "PMOE_OUT=$PMOE_OUT"
-# p-MoE: Load-Aware p-bit Competitive Routing
+﻿# p-MoE: Load-Aware p-bit Competitive Routing
 
 This repository is a research framework for **Load-Aware p-bit Competitive Routing for Sparse Mixture-of-Experts Language Models**.
 
@@ -310,6 +282,13 @@ python scripts/eval_deepseek_adapter_ppl.py \
   --adapter_path "$PMOE_OUT/deepseek_qlora_pbit_1000" \
   --output_dir "$PMOE_OUT" \
   --local_files_only
+```
+
+The full baseline -> p-bit -> adapter PPL -> result collection sequence can be run manually with:
+
+```bash
+MAX_STEPS=1000 BLOCK_SIZE=1024 GRAD_ACCUM=8 \
+  bash scripts/run_deepseek_qlora_pbit_pipeline.sh
 ```
 
 ## Mini-MoE Workflow

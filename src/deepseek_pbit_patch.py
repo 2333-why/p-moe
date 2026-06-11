@@ -25,12 +25,18 @@ class DeepSeekPBitPatchConfig:
 
     enabled: bool = True
     alpha: float = 0.1
-    beta: float = 0.1
-    temperature: float = 1.0
+    beta: float = 0.001
+    temperature: float = 2.0
     min_temperature: float = 0.2
     load_ema_decay: float = 0.99
     use_load_bias: bool = True
     use_competition: bool = True
+    forward_preserve: bool = True
+    use_trust_region: bool = True
+    trust_region_gamma: float = 0.03
+    load_margin: float = 0.005
+    top_m: int | None = None
+    load_bias_forward: bool = False
     normalize_topk_prob: bool | None = None
     patch_train_only: bool = True
     eps: float = 1.0e-20
@@ -161,6 +167,12 @@ def _patch_gate_module(module: nn.Module, name: str, config: DeepSeekPBitPatchCo
     if getattr(module, "_pmoe_pbit_patched", False):
         return
     num_experts = int(module.n_routed_experts)
+    if config.top_m is not None:
+        top_m = int(config.top_m)
+        if top_m < int(module.top_k) or top_m > num_experts:
+            raise ValueError(
+                f"Invalid top_m={top_m} for gate {name}. It must satisfy top_k <= top_m <= num_experts."
+            )
     initial_load = torch.full((num_experts,), 1.0 / num_experts)
     module.register_buffer("_pmoe_load_ema", initial_load)
     module.register_buffer("_pmoe_load_updates", torch.zeros((), dtype=torch.long))
@@ -202,7 +214,10 @@ def _pbit_gate_forward(self: nn.Module, hidden_states: Tensor):
         raise NotImplementedError(f"Unsupported scoring function for p-bit MoE gate: {self.scoring_func}")
 
     bias = _load_bias(self, scores, config)
-    hard_scores = scores + bias
+    if config.forward_preserve or not config.load_bias_forward:
+        hard_scores = scores
+    else:
+        hard_scores = scores + bias
     _, topk_idx = torch.topk(hard_scores, k=self.top_k, dim=-1, sorted=False)
     hard_mask = torch.zeros_like(scores).scatter_(-1, topk_idx, 1.0)
 
@@ -213,7 +228,16 @@ def _pbit_gate_forward(self: nn.Module, hidden_states: Tensor):
     local_field = local_field + bias
 
     temperature = max(float(config.temperature), float(config.min_temperature))
-    q = torch.sigmoid(local_field / temperature)
+    q_raw = torch.sigmoid(local_field / temperature)
+    if config.top_m is not None:
+        _, candidate_idx = torch.topk(scores, k=int(config.top_m), dim=-1, sorted=False)
+        candidate_mask = torch.zeros_like(scores).scatter_(-1, candidate_idx, 1.0)
+        q_raw = q_raw * candidate_mask
+    if config.use_trust_region:
+        gamma = min(max(float(config.trust_region_gamma), 0.0), 1.0)
+        q = (1.0 - gamma) * scores + gamma * q_raw
+    else:
+        q = q_raw
     st_mask = hard_mask.detach() - q.detach() + q
 
     selected_scores = scores.gather(dim=-1, index=topk_idx)
@@ -246,7 +270,8 @@ def _load_bias(module: nn.Module, scores: Tensor, config: DeepSeekPBitPatchConfi
         return torch.zeros_like(scores)
     load = module._pmoe_load_ema.to(device=scores.device, dtype=scores.dtype)
     target = 1.0 / int(module.n_routed_experts)
-    bias = config.beta * (target - load)
+    underload = torch.relu(target - load - float(config.load_margin))
+    bias = config.beta * underload
     return bias.view(1, -1).expand_as(scores)
 
 

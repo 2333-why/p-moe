@@ -53,10 +53,16 @@ train_router: true
 record_router_metrics: true
 
 alpha: 0.0
-beta: 0.01
-temperature: 1.0
+beta: 0.001
+temperature: 2.0
 min_temperature: 0.2
 load_ema_decay: 0.99
 use_load_bias: true
 use_competition: true
+forward_preserve: true
+use_trust_region: true
+trust_region_gamma: 0.03
+load_margin: 0.005
+top_m:
+load_bias_forward: false
 patch_train_only: true

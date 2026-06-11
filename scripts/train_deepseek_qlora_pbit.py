@@ -55,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dataset_name", default=None)
     parser.add_argument("--dataset_config_name", default=None)
     parser.add_argument("--dataset_split", default=None)
+    parser.add_argument("--text_column", default=None)
     parser.add_argument("--block_size", type=int, default=None)
     parser.add_argument("--max_steps", type=int, default=None)
     parser.add_argument("--per_device_train_batch_size", type=int, default=None)
@@ -74,6 +75,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--alpha", type=float, default=None)
     parser.add_argument("--beta", type=float, default=None)
     parser.add_argument("--temperature", type=float, default=None)
+    parser.add_argument("--forward_preserve", type=str_to_bool, nargs="?", const=True, default=None)
+    parser.add_argument("--no_forward_preserve", action="store_true")
+    parser.add_argument("--use_trust_region", type=str_to_bool, nargs="?", const=True, default=None)
+    parser.add_argument("--no_trust_region", action="store_true")
+    parser.add_argument("--trust_region_gamma", type=float, default=None)
+    parser.add_argument("--load_margin", type=float, default=None)
+    parser.add_argument("--top_m", type=int, default=None)
+    parser.add_argument("--load_bias_forward", type=str_to_bool, nargs="?", const=True, default=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--use_wandb", type=str_to_bool, nargs="?", const=True, default=None)
     return parser
@@ -129,12 +138,18 @@ def default_config() -> Dict[str, Any]:
         "train_router": True,
         "record_router_metrics": True,
         "alpha": 0.0,
-        "beta": 0.01,
-        "temperature": 1.0,
+        "beta": 0.001,
+        "temperature": 2.0,
         "min_temperature": 0.2,
         "load_ema_decay": 0.99,
         "use_load_bias": True,
         "use_competition": True,
+        "forward_preserve": True,
+        "use_trust_region": True,
+        "trust_region_gamma": 0.03,
+        "load_margin": 0.005,
+        "top_m": None,
+        "load_bias_forward": False,
         "patch_train_only": True,
     }
 
@@ -147,6 +162,10 @@ def normalize_config(args: argparse.Namespace) -> Dict[str, Any]:
     config = merge_config(args, config)
     if args.no_pbit_patch:
         config["use_pbit_patch"] = False
+    if args.no_forward_preserve:
+        config["forward_preserve"] = False
+    if args.no_trust_region:
+        config["use_trust_region"] = False
     return config
 
 
@@ -253,6 +272,12 @@ def run_training(config: Dict[str, Any]) -> None:
             "alpha": config.get("alpha"),
             "beta": config.get("beta"),
             "temperature": config.get("temperature"),
+            "forward_preserve": config.get("forward_preserve"),
+            "use_trust_region": config.get("use_trust_region"),
+            "trust_region_gamma": config.get("trust_region_gamma"),
+            "load_margin": config.get("load_margin"),
+            "top_m": config.get("top_m"),
+            "load_bias_forward": config.get("load_bias_forward"),
         },
     }
     save_training_artifacts(config, summary)
@@ -261,6 +286,9 @@ def run_training(config: Dict[str, Any]) -> None:
 def _pbit_config_from_mapping(config: Dict[str, Any]) -> DeepSeekPBitPatchConfig:
     """Build p-bit patch config from script config."""
 
+    top_m = config.get("top_m")
+    if top_m in ("", "none", "None"):
+        top_m = None
     return DeepSeekPBitPatchConfig(
         enabled=True,
         alpha=float(config.get("alpha", 0.0)),
@@ -270,6 +298,12 @@ def _pbit_config_from_mapping(config: Dict[str, Any]) -> DeepSeekPBitPatchConfig
         load_ema_decay=float(config.get("load_ema_decay", 0.99)),
         use_load_bias=bool(config.get("use_load_bias", True)),
         use_competition=bool(config.get("use_competition", True)),
+        forward_preserve=bool(config.get("forward_preserve", True)),
+        use_trust_region=bool(config.get("use_trust_region", True)),
+        trust_region_gamma=float(config.get("trust_region_gamma", 0.03)),
+        load_margin=float(config.get("load_margin", 0.005)),
+        top_m=None if top_m is None else int(top_m),
+        load_bias_forward=bool(config.get("load_bias_forward", False)),
         patch_train_only=bool(config.get("patch_train_only", True)),
     )
 
